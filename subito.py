@@ -32,7 +32,22 @@
 #           c) Converting a subnet mask to a prefix and vice versa;
 #           d) Determining the class of an IPv4 address and to which
 #               use cases it is applicable.
+###
+
+###
+# For many of the tasks shown here we need a function extracting
+# the numerical octets from a valid(!) IP string.
+# => Returns a list with the four octets as integers.
 #
+def retrieve_octets(valid_octet_str: str) -> list[int]:
+    octets = []
+    for _ in range(3):
+        octets.append(int(valid_octet_str[:valid_octet_str.index(".")]))
+        valid_octet_str = valid_octet_str[valid_octet_str.index(".")+1:]
+
+    octets.append(int(valid_octet_str))
+    return octets
+
 
 ###
 # A subnet mask is valid iff it fulfills the following criteria:
@@ -45,14 +60,14 @@
 #   5)  If the predecessor of an octet ends with a zero, all(!)
 #       of its succeeding octets must equal zero;
 #   6)  The first octet must not equal zero;
-#   7)  The last octet must not be bigger than 252¹ ('11111100').
+#   7)  The last octet must not be bigger than 252 ('11111100').¹
 #
 #   [1] In rare cases when using point-to-point connections, the
 #       last octet may equal 254 ('11111110'); omitting both net-
 #       work and broadcast addresses, only considering the ending
-#       points host addresses.
+#       points' host addresses.
 #       Because this is very rare, it won't be covered by this
-#       function. In most cases such a mask would just
+#       function. Usually, such a mask would just
 #       be insufficient or not be accepted.
 #
 def is_subnetmask_valid(mask: str) -> bool:
@@ -126,16 +141,90 @@ def is_ipaddr_valid(ip: str) -> bool:
         return False
 
 
-def main():
-    if is_ipaddr_valid("124.10.0.1"):
-        print("IP is valid")
-    else:
-        print("IP is invalid")
+###
+# Determining address classes and default subnet masks
+# is important for clarification how many borrow bits
+# actually are taken when subnetting a given network.
+# How this is done?
+# To make routing more efficient, once five basic address
+# classes had been introduced:
+#
+#   +–{Class}–+–{1st byte's bits}–+–{Predefined bits}–+
+#   |    A    |         1         |        0          |
+#   +–––––––––+–––––––––––––––––––+–––––––––––––––––––+
+#   |    B    |        1-2        |        10         |
+#   +–––––––––+–––––––––––––––––––+–––––––––––––––––––+
+#   |    C    |        1-3        |        110        |
+#   +–––––––––+–––––––––––––––––––+–––––––––––––––––––+
+#   |    D    |        1-4        |        1110       |
+#   +–––––––––+–––––––––––––––––––+–––––––––––––––––––+
+#   |    E    |        1-4        |        1111       |
+#   +–––––––––+–––––––––––––––––––+–––––––––––––––––––+
+#
+# First bytes (octets) ranges and default subnet masks:
+#
+# Class A, range: 1-126; 127 reserved for loop-back;
+#   Default subnet mask: 255.0.0.0; prefix /8;
+#
+# Class B, range: 128-191;
+#   Default subnet mask: 255.255.0.0; prefix /16;
+#
+# Class C, range: 192-223;
+#   Default subnet mask: 255.255.255.0; prefix /24;
+#
+# Class D, broadcast: 224-239;
+# Class E, scientific purposes: 240-254.
+#
+# Therefore, we simply check the
+# bit pattern of the first nibble (four bits) of the first
+# octet from any given and valid(!) IPv4 address against
+# the patterns from the table above.
+# If it matches one out of these, we already got
+# the address class.
+# => The function returns class (i.e. "B"), subnet mask
+# (i.e. "255.255.0.0") and prefix (i.e. "16").
+#
+def determine_addrclass(ip: str) -> list[str]:
+    first_octet = retrieve_octets(ip)[0]
+    if first_octet in range(1, 128):
+        addrclass = "A"
+        mask = "255.0.0.0"
+        prefix = "8"
+    elif first_octet in range(128, 192):
+        addrclass = "B"
+        mask = "255.255.0.0"
+        prefix = "16"
+    elif first_octet in range(192, 224):
+        addrclass = "C"
+        mask = "255.255.255.0"
+        prefix = "24"
+    elif first_octet in range(224, 240):
+        addrclass = "D"
+        mask = ""
+        prefix = ""
+    elif first_octet in range(240, 255):
+        addrclass = "E"
+        mask = ""
+        prefix = ""
 
-    if is_subnetmask_valid("255.255.128.0"):
-        print("Mask is valid")
+    return [addrclass, mask, prefix]
+
+
+def main():
+    ip = str(input(f"Enter IPv4 address: "))
+    mask = str(input(f"Enter subnet mask: "))
+    if is_ipaddr_valid(ip):
+        print(f"\nIP address is valid:")
+        print(f"\tAddress class: {determine_addrclass(ip)[0]}")
+        print(f"\tDefault subnet mask: {determine_addrclass(ip)[1]}")
+        print(f"\tDefault prefix: {determine_addrclass(ip)[2]}")
     else:
-        print("Mask is invalid")
+        print(f"\nIP address is invalid!")
+
+    if is_subnetmask_valid(mask):
+        print(f"\nSubnet mask is valid.")
+    else:
+        print(f"\nSubnet mask is invalid!")
 
 
 if __name__ == "__main__":
