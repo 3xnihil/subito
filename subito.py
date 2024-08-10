@@ -266,7 +266,7 @@ def convert_prefix_to_subnetmask(prefix: str) -> str:
     for dec_octet in decimal_octets:
         subnetmask += f"{dec_octet}."
 
-    # Cut the last dot when returning the string
+    # Remove the last dot when returning the string
     return subnetmask[:-1]
 
 
@@ -281,17 +281,27 @@ def convert_prefix_to_subnetmask(prefix: str) -> str:
 #
 def get_new_subnetmask_using_hostnum(hostnum: int,
                                      reserve_percentage: int = 20) -> list[str]:
-    hostnum_reserve_incl = floor(hostnum + hostnum * (reserve_percentage/100))
+    hostnum_reserve_incl = ceil(hostnum + hostnum * (reserve_percentage/100))
+
     host_bits_required = len(bin(hostnum)[2:])
     host_bits_required_reserve_incl = len(bin(hostnum_reserve_incl)[2:])
+
     prefix = 32 - host_bits_required
     prefix_reserve_incl = 32 - host_bits_required_reserve_incl
+
+    subnetmask = convert_prefix_to_subnetmask(str(prefix))
+    subnetmask_reserve_incl = convert_prefix_to_subnetmask(
+        str(prefix_reserve_incl))
+
+    return [subnetmask, subnetmask_reserve_incl]
 
 
 def main():
     ip = str(input(f"Enter IPv4 address: "))
     mask = str(input(f"Enter subnet mask: "))
     prefix = str(input(f"Enter prefix: "))
+    hosts = str(input(f"Enter desired host amount: "))
+    reserve_percentage = str(input(f"Enter address reserve percentage [0-100]: "))
 
     if is_ipaddr_valid(ip):
         print(f"\nIP address is valid:")
@@ -312,6 +322,28 @@ def main():
             f"Corresponding subnet mask: {convert_prefix_to_subnetmask(prefix)}")
     else:
         print(f"\nPrefix is invalid!")
+
+    if hosts.isdigit():
+
+        if reserve_percentage.isdigit() and int(reserve_percentage) in range(0, 101):
+            reserve_percentage = int(reserve_percentage)
+        else:
+            reserve_percentage = 0
+
+        hosts = int(hosts)
+        subnetmasks = get_new_subnetmask_using_hostnum(hosts, reserve_percentage)
+        new_mask = subnetmasks[0]
+        new_mask_reserve_incl = subnetmasks[1]
+        new_prefix = convert_subnetmask_to_prefix(new_mask)
+        new_prefix_reserve_incl = convert_subnetmask_to_prefix(
+            new_mask_reserve_incl)
+
+        print(f"Host-based subnet mask recommendation for {hosts} hosts:")
+        print(f"\tOn demand: {new_mask}")
+        print(f"\tWith reserve of {reserve_percentage}%: {new_mask_reserve_incl}")
+
+    else:
+        print(f"\nInvalid host amount!")
 
 
 if __name__ == "__main__":
