@@ -34,11 +34,15 @@
 #               use cases it is applicable.
 ###
 
+from math import ceil, floor
+
 ###
 # For many of the tasks shown here we need a function extracting
 # the numerical octets from a valid(!) IP string.
 # => Returns a list with the four octets as integers.
 #
+
+
 def retrieve_octets(valid_octet_str: str) -> list[int]:
     octets = []
     for _ in range(3):
@@ -142,6 +146,17 @@ def is_ipaddr_valid(ip: str) -> bool:
 
 
 ###
+# A prefix is valid iff it is in range between 1-30.¹
+#
+# [1] In rare cases the prefix may be extended up to 31,
+#   when using point-to-point connections. This won't be
+#   covered here, because we don't usually want this.
+#
+def is_prefix_valid(prefix: str) -> bool:
+    return prefix.isdigit() and int(prefix) in range(1, 31)
+
+
+###
 # Determining address classes and default subnet masks
 # is important for clarification how many borrow bits
 # actually are taken when subnetting a given network.
@@ -210,9 +225,74 @@ def determine_addrclass(ip: str) -> list[str]:
     return [addrclass, mask, prefix]
 
 
+###
+# Convert subnet mask to prefix.
+# Only applicable to already validated mask-strings!
+#
+def convert_subnetmask_to_prefix(mask: str) -> int:
+    binary_prefix_str = ""
+    decimal_octets = retrieve_octets(mask)
+
+    # Convert decimals to binaries.
+    # The amount of '1's corresponds to the prefix.
+    for dec_octet in decimal_octets:
+        binary_prefix_str += bin(dec_octet)[2:]
+
+    return binary_prefix_str.count("1")
+
+
+###
+# Convert prefix to subnet mask.
+# Only applicable to validated prefixes!
+#
+def convert_prefix_to_subnetmask(prefix: str) -> str:
+    binary_prefix = (int(prefix) * "1").ljust(32, "0")
+    binary_octets = []
+    decimal_octets = [0] * 4
+    subnetmask = ""
+
+    # Extract each byte from 32-bit string
+    for n in range(0, 25, 8):
+        binary_octets.append(binary_prefix[n:n+8])
+
+    # Convert each byte bitwise to its decimal value
+    for (octet_num, bin_octet) in enumerate(binary_octets):
+        for i in range(7, -1, -1):
+            bit = int(bin_octet[i:i+1])
+            n = 8 - i
+            decimal_octets[octet_num] += bit * 2 ** (n-1)
+
+    # Recombine the decimal octets to a subnet mask string
+    for dec_octet in decimal_octets:
+        subnetmask += f"{dec_octet}."
+
+    # Cut the last dot when returning the string
+    return subnetmask[:-1]
+
+
+###
+# Calculate subnetting based on the desired amount of hosts.
+# Optionally, an address reserve (as percentage) can be provided
+# allowing future growth of the network (more hosts) which is often
+# required and thoughtful.
+# By default, this reserve is set to 20 percent.
+# => The function returns a list, containing the subnet mask without
+#   growth reserve in first and with growth reserve in second place.
+#
+def get_new_subnetmask_using_hostnum(hostnum: int,
+                                     reserve_percentage: int = 20) -> list[str]:
+    hostnum_reserve_incl = floor(hostnum + hostnum * (reserve_percentage/100))
+    host_bits_required = len(bin(hostnum)[2:])
+    host_bits_required_reserve_incl = len(bin(hostnum_reserve_incl)[2:])
+    prefix = 32 - host_bits_required
+    prefix_reserve_incl = 32 - host_bits_required_reserve_incl
+
+
 def main():
     ip = str(input(f"Enter IPv4 address: "))
     mask = str(input(f"Enter subnet mask: "))
+    prefix = str(input(f"Enter prefix: "))
+
     if is_ipaddr_valid(ip):
         print(f"\nIP address is valid:")
         print(f"\tAddress class: {determine_addrclass(ip)[0]}")
@@ -225,6 +305,13 @@ def main():
         print(f"\nSubnet mask is valid.")
     else:
         print(f"\nSubnet mask is invalid!")
+
+    if is_prefix_valid(prefix):
+        print(f"\nPrefix is valid.")
+        print(
+            f"Corresponding subnet mask: {convert_prefix_to_subnetmask(prefix)}")
+    else:
+        print(f"\nPrefix is invalid!")
 
 
 if __name__ == "__main__":
