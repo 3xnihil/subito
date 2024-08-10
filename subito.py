@@ -126,7 +126,7 @@ def is_ipaddr_valid(ip: str) -> bool:
             octets.append(ip[:ip.index(".")])
             ip = ip[ip.index(".")+1:]
 
-        # Remaining 'ip' string contains last octet (if so)
+        # Remaining 'ip' string contains last octet
         octets.append(ip)
 
         for (n, octet) in enumerate(octets):
@@ -296,12 +296,52 @@ def get_new_subnetmask_using_hostnum(hostnum: int,
     return [subnetmask, subnetmask_reserve_incl]
 
 
+###
+# Calculate subnetting, based on the desired amount of subnets.
+# Optionally, a network reserve (as percentage) can be provided;
+# allowing future growth in case more subnets are required.
+# By default, this reserve is set to 20 percent.
+# '->   The function expects an IP address and optionally an already
+#       customized subnet mask.
+# ==>   The function returns a list, containing the subnet mask without
+#       growth reserve in first and with growth reserve in second place.
+#
+def get_new_subnetmask_using_netnum(netnum: int, ip: str,
+                                    reserve_percentage: int = 20,
+                                    mask: str = "") -> list[str]:
+
+    # If no custom subnet mask is given, get the default mask
+    if mask == "":
+        default_prefix = int(determine_addrclass(ip)[2])
+    else:
+        default_prefix = convert_subnetmask_to_prefix(mask)
+
+    # Now, let's see how many borrow bits (subnetting bits) are needed
+    netnum_reserve_incl = ceil(netnum + netnum * (reserve_percentage/100))
+    borrow_bits_required = len(bin(netnum)[2:])
+    borrow_bits_required_reserve_incl = len(bin(netnum_reserve_incl)[2:])
+
+    # Easily we can get the new prefix by just adding the borrow bits
+    # to the default prefix:
+    new_prefix = default_prefix + borrow_bits_required
+    new_prefix_reserve_incl = default_prefix + borrow_bits_required_reserve_incl
+
+    # From the new prefix, it's just another step to calculate the new subnet mask
+    new_subnetmask = convert_prefix_to_subnetmask(new_prefix)
+    new_subnetmask_reserve_incl = convert_prefix_to_subnetmask(
+        new_prefix_reserve_incl)
+
+    return [new_subnetmask, new_subnetmask_reserve_incl]
+
+
 def main():
     ip = str(input(f"Enter IPv4 address: "))
     mask = str(input(f"Enter subnet mask: "))
     prefix = str(input(f"Enter prefix: "))
     hosts = str(input(f"Enter desired host amount: "))
-    reserve_percentage = str(input(f"Enter address reserve percentage [0-100]: "))
+    reserve_percentage = str(
+        input(f"Enter address reserve percentage [0-100]: "))
+    subnets = str(input(f"How many subnets do you need?: "))
 
     if is_ipaddr_valid(ip):
         print(f"\nIP address is valid:")
@@ -331,7 +371,8 @@ def main():
             reserve_percentage = 0
 
         hosts = int(hosts)
-        subnetmasks = get_new_subnetmask_using_hostnum(hosts, reserve_percentage)
+        subnetmasks = get_new_subnetmask_using_hostnum(
+            hosts, reserve_percentage)
         new_mask = subnetmasks[0]
         new_mask_reserve_incl = subnetmasks[1]
         new_prefix = convert_subnetmask_to_prefix(new_mask)
@@ -340,10 +381,20 @@ def main():
 
         print(f"Host-based subnet mask recommendation for {hosts} hosts:")
         print(f"\tOn demand: {new_mask}")
-        print(f"\tWith reserve of {reserve_percentage}%: {new_mask_reserve_incl}")
+        print(
+            f"\tWith reserve of {reserve_percentage}%: {new_mask_reserve_incl}")
 
     else:
         print(f"\nInvalid host amount!")
+
+    if subnets.isdigit():
+        subnets = int(subnets)
+        masks = get_new_subnetmask_using_netnum(
+            subnets, ip, reserve_percentage)
+        print(f"On-demand subnet mask for {subnets} subnets: {masks[0]}")
+        print(f"With reserve of {reserve_percentage}%: {masks[1]}")
+    else:
+        print(f"\Invalid subnet amount!")
 
 
 if __name__ == "__main__":
