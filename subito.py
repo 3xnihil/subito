@@ -281,6 +281,7 @@ def convert_prefix_to_subnetmask(prefix: str) -> str:
 #
 def get_new_subnetmask_using_hostnum(hostnum: int,
                                      reserve_percentage: int = 20) -> list[str]:
+    hostnum += 2    # Always include network and broadcast addresses, too!                                     
     hostnum_reserve_incl = ceil(hostnum + hostnum * (reserve_percentage/100))
 
     host_bits_required = len(bin(hostnum)[2:])
@@ -309,7 +310,7 @@ def get_new_subnetmask_using_hostnum(hostnum: int,
 def get_new_subnetmask_using_netnum(netnum: int, ip: str,
                                     reserve_percentage: int = 20,
                                     mask: str = "") -> list[str]:
-
+                                    
     # If no custom subnet mask is given, get the default mask
     if mask == "":
         default_prefix = int(determine_addrclass(ip)[2])
@@ -332,6 +333,72 @@ def get_new_subnetmask_using_netnum(netnum: int, ip: str,
         new_prefix_reserve_incl)
 
     return [new_subnetmask, new_subnetmask_reserve_incl]
+
+
+###
+# A usual exercise consists of creating a networking plan.
+# This function aims to auto-solve subnettings for symmetrical
+# subnetting, where each subnet portion has the same size.
+#
+# Starting from a given IP address (and subnet mask or prefix),
+# a list of options has to be found out about:
+#
+#   1)  Which part of the network is more important:
+#       Subnets (borrow bits) or hosts (host bits)?
+#       As an example: If you really need at least an address
+#       space for 230 hosts (plus two to make sure both network
+#       and broadcast address are taken into account!), your
+#       prefix must be 32 - 8 = 24 bits long at max (what corresponds
+#       to a subnet mask of 255.255.255.0).
+#       The prefix can't be longer, because otherwise the minimum
+#       requirement for address space would be violated.
+#   (i) So, it's a question of your own priorities!
+#
+#   2)  Regarding to question (1), the new subnet mask will be
+#       calculated; considering these priorities.
+#
+#   3)  In both cases - host- or network-based approach - the function
+#       prints out how many ...
+#           a)  (symmetric) subnets are possible (with the new mask),
+#           b)  hosts are possible per subnet and
+#           c)  the new subnet mask / prefix of course.
+#
+#   4)  Based on the knowledge from (3), the address ranges for each
+#       subnet are provided via a friedly readable text output.
+#       This would be like:
+#           FIXME: Shown addresses are incorrectly subnetted!
+#
+#           +––––––––| Network 172.16.20.0/16 |––––––––––+
+#           |                                            |
+#           |  New subnet mask: 255.255.128.0 (/17)      |
+#           |                                            |
+#           +––| Subnet  |––+–––––––| Addresses |––––––––+
+#           |               | Network:    172.16.0.0     |
+#           |       1       | Broadcast:  172.16.20.127  |
+#           |               | First host: 172.16.20.1    |
+#           |               | Last host:  172.16.20.126  |
+#           +–––––––––––––––+––––––––––––––––––––––––––––+
+#           |               | Network:    172.16.20.128  |
+#           |       2       | Broadcast:  172.16.20.255  |
+#           |               | First host: 172.16.20.129  |
+#           |               | Last host:  172.16.20.254  |
+#           +–––––––––––––––+––––––––––––––––––––––––––––+
+#
+#   5)  If the number of subnets exceeds two, each subnet's
+#       data should be accessible on demand to keep things
+#       tidy and overseeable.
+#       This is done as follows:
+#
+#           Original network: 172.16.20.0/16
+#           4 subnets, 3 demanded (1 in reserve):
+#             New subnet mask: 255.255.192.0 (/18)
+#             Show addresses for subnet [1-4]: 1
+#           => Subnet 1:    Network:    172.16.20.0
+#                           Broadcast:  172.16.
+#                           First host: 172.16.
+#                           Last host:  172.16.
+#
+#
 
 
 def main():
