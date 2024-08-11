@@ -310,7 +310,7 @@ def get_new_subnetmask_using_hostnum(hostnum: int,
 def get_new_subnetmask_using_netnum(netnum: int, ip: str,
                                     reserve_percentage: int = 20,
                                     mask: str = "") -> list[str]:
-                                    
+
     # If no custom subnet mask is given, get the default mask
     if mask == "":
         default_prefix = int(determine_addrclass(ip)[2])
@@ -366,38 +366,52 @@ def get_new_subnetmask_using_netnum(netnum: int, ip: str,
 #   4)  Based on the knowledge from (3), the address ranges for each
 #       subnet are provided via a friedly readable text output.
 #       This would be like:
-#           FIXME: Shown addresses are incorrectly subnetted!
 #
-#           +––––––––| Network 172.16.20.0/16 |––––––––––+
-#           |                                            |
-#           |  New subnet mask: 255.255.128.0 (/17)      |
-#           |                                            |
-#           +––| Subnet  |––+–––––––| Addresses |––––––––+
-#           |               | Network:    172.16.0.0     |
-#           |       1       | Broadcast:  172.16.20.127  |
-#           |               | First host: 172.16.20.1    |
-#           |               | Last host:  172.16.20.126  |
-#           +–––––––––––––––+––––––––––––––––––––––––––––+
-#           |               | Network:    172.16.20.128  |
-#           |       2       | Broadcast:  172.16.20.255  |
-#           |               | First host: 172.16.20.129  |
-#           |               | Last host:  172.16.20.254  |
-#           +–––––––––––––––+––––––––––––––––––––––––––––+
+#           *** SYMMETRIC SUBNETTING TOOL ***
+#           Original network's addr: 172.16.0.0
+#           Custom prefix (if given; otherwise leave empty):
+#             –> No custom prefix, addr. class is B (/16).
+#           Host-based or network-based subnetting [H/n]?: N
+#             –> Network-based subnetting.
+#           How many subnets at least IN TOTAL?: 2
+#           Reserve for future growth in percent [0-100]: 0
+#             –> Okay, only on-demand calculation.
+#           How many hosts PER NET at least [1-32766]?: 120
+#             –> This will work ;)
+#           
+#           Summary: Original network: 172.16.0.0/16
+#                    2 total subnets (2 demanded, 0 in reserve)
+#                    –> New subnet mask: 255.255.128.0 (/17)
+#
+#           1. subnet:  Network addr: 172.16.0.0
+#                       Broadc. addr: 172.16.127.255
+#                       First host:   172.16.0.1
+#                       Last host:    172.16.127.254
+#
+#           2. subnet:  Network addr: 172.16.128.0
+#                       Broadc. addr: 172.16.255.255
+#                       First host:   172.16.128.1
+#                       Last host:    172.16.255.254
+#               
 #
 #   5)  If the number of subnets exceeds two, each subnet's
 #       data should be accessible on demand to keep things
 #       tidy and overseeable.
-#       This is done as follows:
+#       Another example:
 #
-#           Original network: 172.16.20.0/16
-#           4 subnets, 3 demanded (1 in reserve):
-#             New subnet mask: 255.255.192.0 (/18)
-#             Show addresses for subnet [1-4]: 1
-#           => Subnet 1:    Network:    172.16.20.0
-#                           Broadcast:  172.16.
-#                           First host: 172.16.
-#                           Last host:  172.16.
+#           Original network: 172.16.0.0/16
+#           4 total subnets (3 demanded, 1 in reserve):
+#             –> New subnet mask: 255.255.192.0 (/18)
+#              Show addresses for subnet [1-4|Quit]: 3
 #
+#           3. subnet:  Network addr: 172.16.128.0
+#                       Broadc. addr: 172.16.191.255
+#                       First host:   172.16.128.1
+#                       Last host:    172.16.191.254
+#
+#              Show addresses for subnet [1-4|Quit]: Q
+#
+#           *** See you :) ***
 #
 
 
