@@ -8,41 +8,119 @@
 # This little program aims to support network technicians
 # in creating networks and planning subnets.
 #
-# It aims to the following purposes in special:
-#   1)  Putting out address ranges, subnet mask / prefix
-#       on a given network. By default, the standard
-#       address class is taken, but the user can choose
-#       a different default subnet mask instead.
-#   2)  If a certain amount of hosts is given, calculate
-#       an appropriate subnet mask / prefix.
-#       => Returns how many hosts and subnets the resulting
-#       network would be capable of.
-#       Optionally, a percentage can be provided in order
-#       to calculate an address space reserve considering
-#       future network growth.
-#   3)  If a certain amount of subnets is given, calculate
-#       an appropriate subnet mask / prefix.
-#       => Returns how many subnets and hosts the resulting
-#       network would be capable of.
-#       Here, a percentage value considering future network
-#       growth can also be taken into account.
-#   4)  Offering simple tools being part of the above features like:
+# A usual exercise consists of creating a networking plan.
+# This function aims to auto-solve subnetting even with
+# the more complex VLSM method.
+#
+#   FLSM (Fixed Length Subnet Mask):
+#       All subnets have the same size (address space).
+#       Fairly easy to configure and maintain, but wasting IP addresses.
+#
+#   VLSM (Variable Length Subnet Mask):
+#       Today's standard in IPv4 subnetting.
+#       Subnets may have different block sizes, which is
+#       commonly used in order to save address space and improve security.
+#       In example, you don't need more than two host addresses for
+#       point-to-point connections between routers. Hence, (aside from
+#       network and broadcast addresses) only two host addresses are
+#       required for such a net.
+#
+#   ==> This tool aims to make VLSM quite easy to configure.
+#
+# Starting from a given IP address (and subnet mask or prefix),
+# a list of options has to be found out about:
+#
+#   1) The original network address.
+#       It is important to determine the default address class
+#       and prefix / subnet mask of the network such that we
+#       can tell how many borrow bits (subnetting bits) will
+#       be in use.
+#         Further, subnetting will entirely be regretted
+#       for class D and E networks (since they serve entirely
+#       different purposes) as well as addresses starting with
+#       127.x.x.x, because they are reserved for link-local.
+#         However, any address will surely be checked for its
+#       overall validity.
+#
+#   2) Telling the network's arragement.
+#       This tool has to know exactly:
+#           a) How many subnets are currently required ("on-demand"),
+#               and which reserve in subnets it should
+#               hold back (a percentage for future growth),
+#           b) How many hosts PER EACH subnet are demanded and
+#               whether future growth has to be considered (percentage).
+#
+# The program tells whether this configuration is possible (in terms of
+# subnets vs. hosts and desired quantities) and, if it is, shows a
+# network plan with all subnets and their address spaces.
+#
+# Put into a user-friedly CLI, this would be like:
+#
+#           *** SUBITO – subnetting tool ***
+#
+#           Original network's address [#.#.#.#]: 172.16.0.0
+#             –> Class is B. Default prefix: /16
+#
+#           Configuration: Enter desired host count AND
+#                reserve percentage PER EACH 'on-demand' subnet.
+#               Give example? [y/N]: Y
+#
+#             –> You need 5 subnets in total. These are called your
+#                on-demand subnets.
+#                2 of them are point-to-point networks,
+#                3 of them should contain 150 hosts with 20% reserve,
+#                the remaining address space is in reserve.
+#
+#                For this choice, you would enter: 2:0(2),150:20(3)
+#
+#           Syntax: <hosts on-demand>:<reserve percent>(<'n' configs>)
+#
+#                The round brackets may be omitted if only one subnet of
+#                this configuration is wished-for. Each config block has
+#                to be separated by colon from another.
+#
+#           Enter config string [#:#(#)]: 2:0(2),150:20,7:35,30:50
+#
+#           Summary: Original network: 172.16.0.0/16
+#                    5 total subnets:
+#                       (1) 150 hosts, 20% reserve  (total: 254)
+#                       (2)  30 hosts, 50% reserve  (total: 62)
+#                       (3)   7 hosts, 35% reserve  (total: 14)
+#                       (4)   2 hosts, PTP          (total: 2)
+#                       (5)   2 hosts, PTP          (total: 2)
+#
+#           Subnet (1): Network addr: 172.16.0.0/24 (254 hosts)
+#                       Subnet mask:  255.255.255.0
+#                       First host:   172.16.0.1
+#                       Last host:    172.16.0.254
+#                       Broadcast:    172.16.0.255
+#
+#           Subnet (2): Network addr: 172.16.1.0/26 (62 hosts)
+#                       Subnet mask:  255.255.255.192
+#                       First host:   172.16.1.1
+#                       Last host:    172.16.1.62
+#                       Broadcast:    172.16.1.63
+#
+#           ~~~~~~~~~~~~~ Press Enter to show more ~~~~~~~~~~~~~
+#
+#
+#   6)  Offering simple tools being part of the above features like:
 #           a) Determining the validity of an IPv4 address;
 #           b) Determining the validity of a subnet mask;
 #           c) Converting a subnet mask to a prefix and vice versa;
 #           d) Determining the class of an IPv4 address and to which
-#               use cases it is applicable.
+#               use cases it is applicable, etc ...
 ###
 
-from math import ceil, floor
+from math import ceil
+
 
 ###
 # For many of the tasks shown here we need a function extracting
 # the numerical octets from a valid(!) IP string.
 # => Returns a list with the four octets as integers.
+# TESTED: OK
 #
-
-
 def retrieve_octets(valid_octet_str: str) -> list[int]:
     octets = []
     for _ in range(3):
@@ -73,6 +151,8 @@ def retrieve_octets(valid_octet_str: str) -> list[int]:
 #       Because this is very rare, it won't be covered by this
 #       function. Usually, such a mask would just
 #       be insufficient or not be accepted.
+#
+# TESTED: OK
 #
 def is_subnetmask_valid(mask: str) -> bool:
     dots_found = mask.count(".")
@@ -115,6 +195,8 @@ def is_subnetmask_valid(mask: str) -> bool:
 #   3)  Each number is in range between 0 and 255;
 #   4)  The first octet must not begin with zero or 255.
 #
+# TESTED: OK
+#
 def is_ipaddr_valid(ip: str) -> bool:
     dots_found = ip.count(".")
     octets = []
@@ -151,6 +233,8 @@ def is_ipaddr_valid(ip: str) -> bool:
 # [1] In rare cases the prefix may be extended up to 31,
 #   when using point-to-point connections. This won't be
 #   covered here, because we don't usually want this.
+#
+# TESTED: OK
 #
 def is_prefix_valid(prefix: str) -> bool:
     return prefix.isdigit() and int(prefix) in range(1, 31)
@@ -199,6 +283,8 @@ def is_prefix_valid(prefix: str) -> bool:
 # => The function returns class (i.e. "B"), subnet mask
 # (i.e. "255.255.0.0") and prefix (i.e. "16").
 #
+# TESTED: OK
+#
 def determine_addrclass(ip: str) -> list[str]:
     first_octet = retrieve_octets(ip)[0]
     if first_octet in range(1, 128):
@@ -229,6 +315,8 @@ def determine_addrclass(ip: str) -> list[str]:
 # Convert subnet mask to prefix.
 # Only applicable to already validated mask-strings!
 #
+# TESTED: OK
+#
 def convert_subnetmask_to_prefix(mask: str) -> int:
     binary_prefix_str = ""
     decimal_octets = retrieve_octets(mask)
@@ -245,237 +333,117 @@ def convert_subnetmask_to_prefix(mask: str) -> int:
 # Convert prefix to subnet mask.
 # Only applicable to validated prefixes!
 #
+# FIXME
+#
 def convert_prefix_to_subnetmask(prefix: str) -> str:
     binary_prefix = (int(prefix) * "1").ljust(32, "0")
-    binary_octets = []
-    decimal_octets = [0] * 4
-    subnetmask = ""
+    return convert_binstr_to_octetstr(binary_prefix)
 
-    # Extract each byte from 32-bit string
-    for n in range(0, 25, 8):
-        binary_octets.append(binary_prefix[n:n+8])
+
+###
+# We have to know how long the prefix for a requested subnet
+# ideally has to be.
+# It is calculated by subtracting the binary block length of
+# the maximum host amount from the entire block length of an
+# IPv4 address, which equals 32.
+# Important: Adding '2' to the host amount takes care of
+# both network and broadcast addresses.
+#
+# TESTED: OK
+#
+def calculate_prefix(n_hosts: int) -> int:
+    binary_host_blocksize = len(bin(n_hosts+2)[2:])
+    return 32 - binary_host_blocksize
+
+
+###
+# Converting a binary octet list back to a string in
+# human-readable decimal octet format
+# with separation marks (dot notation).
+#
+# TESTED: OK
+#
+def convert_octets_bin_to_dec(bin_octets: list[str]) -> str:
+    dec_octets = [0] * 4
+    octet_str = ""
 
     # Convert each byte bitwise to its decimal value
-    for (octet_num, bin_octet) in enumerate(binary_octets):
-        for i in range(7, -1, -1):
-            bit = int(bin_octet[i:i+1])
-            n = 8 - i
-            decimal_octets[octet_num] += bit * 2 ** (n-1)
+    for (nth_octet, bin_octet) in enumerate(bin_octets):
+        bin_octet = bin_octet[::-1]
+        for (n, bit) in enumerate(bin_octet):
+            dec_octets[nth_octet] += int(bit) * 2 ** n
 
-    # Recombine the decimal octets to a subnet mask string
-    for dec_octet in decimal_octets:
-        subnetmask += f"{dec_octet}."
+    # Recombine the decimal octets to a complete string
+    for dec_octet in dec_octets:
+        octet_str += f"{dec_octet}."
 
     # Remove the last dot when returning the string
-    return subnetmask[:-1]
+    return octet_str[:-1]
 
 
 ###
-# Calculate subnetting based on the desired amount of hosts.
-# Optionally, an address reserve (as percentage) can be provided
-# allowing future growth of the network (more hosts) which is often
-# required and thoughtful.
-# By default, this reserve is set to 20 percent.
-# => The function returns a list, containing the subnet mask without
-#   growth reserve in first and with growth reserve in second place.
+# Convert decimal octet string (i.e. IPv4 address or subnet mask)
+# into a list, containing each octet as a binary string.
 #
-def get_new_subnetmask_using_hostnum(hostnum: int,
-                                     reserve_percentage: int = 20) -> list[str]:
-    hostnum += 2    # Always include network and broadcast addresses, too!                                     
-    hostnum_reserve_incl = ceil(hostnum + hostnum * (reserve_percentage/100))
+# TESTED: OK
+#
+def convert_octets_dec_to_bin(dec_octet_str: str) -> list[str]:
+    bin_octets = []
+    dec_octets = retrieve_octets(dec_octet_str)
 
-    host_bits_required = len(bin(hostnum)[2:])
-    host_bits_required_reserve_incl = len(bin(hostnum_reserve_incl)[2:])
+    for dec_octet in dec_octets:
+        bin_octets.append((bin(dec_octet)[2:]).rjust(8, "0"))
 
-    prefix = 32 - host_bits_required
-    prefix_reserve_incl = 32 - host_bits_required_reserve_incl
-
-    subnetmask = convert_prefix_to_subnetmask(str(prefix))
-    subnetmask_reserve_incl = convert_prefix_to_subnetmask(
-        str(prefix_reserve_incl))
-
-    return [subnetmask, subnetmask_reserve_incl]
+    return bin_octets
 
 
 ###
-# Calculate subnetting, based on the desired amount of subnets.
-# Optionally, a network reserve (as percentage) can be provided;
-# allowing future growth in case more subnets are required.
-# By default, this reserve is set to 20 percent.
-# '->   The function expects an IP address and optionally an already
-#       customized subnet mask.
-# ==>   The function returns a list, containing the subnet mask without
-#       growth reserve in first and with growth reserve in second place.
+# When creating subnets, we can easily determine the next subnet's
+# address by adding the entire subnet's blocksize (all host addresses
+# including network and broadcast) to the previous subnet's address.
 #
-def get_new_subnetmask_using_netnum(netnum: int, ip: str,
-                                    reserve_percentage: int = 20,
-                                    mask: str = "") -> list[str]:
+# Example: 172.16.0.0/24; class B net with original prefix /16 provides
+#   2⁸ = 256 subnets. Each host address block therefore is 8 bits large,
+#   resulting in 256 total addresses per block (with 254 usable hosts).
+#
+#   The next subnet address would be 172.16.1.0, because we have a
+#   carry-bit stepping from 255 (host broadcast) to 0 (next network):
+#
+#                       Mask: 255.255.1111 1111.0000 0000 (255.255.255.0)
+#      Broadcast, 1st subnet: 172. 16.0000 0000.1111 1111 (172.16.0.255)
+#       Net addr, 2nd subnet: 172. 16.0000 0001.0000 0000 (172.16.1.0)
+#
+def determine_succeeding_subnet(net_addr: str, custom_prefix: int) -> str:
+    default_prefix = int(determine_addrclass(net_addr)[2])
 
-    # If no custom subnet mask is given, get the default mask
-    if mask == "":
-        default_prefix = int(determine_addrclass(ip)[2])
+    if custom_prefix >= default_prefix:
+        binary_host_blocksize = 32 - custom_prefix
+        max_hosts_per_block = 2 ** binary_host_blocksize
+
+        # Create two binary strings (without separation markers!).
+        # The first contains the network's IP address and
+        # the second the 'max_hosts_per_block'.
+        # They have to be added binary and then retransformed into
+        # a decimal IP address string:
+        binary_net_addr = convert_octetstr_to_binstr(net_addr)
+        binary_max_hosts_per_block = convert_byte_dec_to_bin(
+            max_hosts_per_block)
+
+        # With this we fill 'binary_max_hosts_per_block' up left with
+        # zeros, such that we can perform bitwise addition
+        binary_max_hosts_per_block = binary_max_hosts_per_block.rjust(32, "0")
+
     else:
-        default_prefix = convert_subnetmask_to_prefix(mask)
-
-    # Now, let's see how many borrow bits (subnetting bits) are needed
-    netnum_reserve_incl = ceil(netnum + netnum * (reserve_percentage/100))
-    borrow_bits_required = len(bin(netnum)[2:])
-    borrow_bits_required_reserve_incl = len(bin(netnum_reserve_incl)[2:])
-
-    # Easily we can get the new prefix by just adding the borrow bits
-    # to the default prefix:
-    new_prefix = default_prefix + borrow_bits_required
-    new_prefix_reserve_incl = default_prefix + borrow_bits_required_reserve_incl
-
-    # From the new prefix, it's just another step to calculate the new subnet mask
-    new_subnetmask = convert_prefix_to_subnetmask(new_prefix)
-    new_subnetmask_reserve_incl = convert_prefix_to_subnetmask(
-        new_prefix_reserve_incl)
-
-    return [new_subnetmask, new_subnetmask_reserve_incl]
-
-
-###
-# A usual exercise consists of creating a networking plan.
-# This function aims to auto-solve subnettings for symmetrical
-# subnetting, where each subnet portion has the same size.
-#
-# Starting from a given IP address (and subnet mask or prefix),
-# a list of options has to be found out about:
-#
-#   1)  Which part of the network is more important:
-#       Subnets (borrow bits) or hosts (host bits)?
-#       As an example: If you really need at least an address
-#       space for 230 hosts (plus two to make sure both network
-#       and broadcast address are taken into account!), your
-#       prefix must be 32 - 8 = 24 bits long at max (what corresponds
-#       to a subnet mask of 255.255.255.0).
-#       The prefix can't be longer, because otherwise the minimum
-#       requirement for address space would be violated.
-#   (i) So, it's a question of your own priorities!
-#
-#   2)  Regarding to question (1), the new subnet mask will be
-#       calculated; considering these priorities.
-#
-#   3)  In both cases - host- or network-based approach - the function
-#       prints out how many ...
-#           a)  (symmetric) subnets are possible (with the new mask),
-#           b)  hosts are possible per subnet and
-#           c)  the new subnet mask / prefix of course.
-#
-#   4)  Based on the knowledge from (3), the address ranges for each
-#       subnet are provided via a friedly readable text output.
-#       This would be like:
-#
-#           *** SYMMETRIC SUBNETTING TOOL ***
-#           Original network's addr: 172.16.0.0
-#           Custom prefix (if given; otherwise leave empty):
-#             –> No custom prefix, addr. class is B (/16).
-#           Host-based or network-based subnetting [H/n]?: N
-#             –> Network-based subnetting.
-#           How many subnets at least IN TOTAL?: 2
-#           Reserve for future growth in percent [0-100]: 0
-#             –> Okay, only on-demand calculation.
-#           How many hosts PER NET at least [1-32766]?: 120
-#             –> This will work ;)
-#           
-#           Summary: Original network: 172.16.0.0/16
-#                    2 total subnets (2 demanded, 0 in reserve)
-#                    –> New subnet mask: 255.255.128.0 (/17)
-#
-#           1. subnet:  Network addr: 172.16.0.0
-#                       Broadc. addr: 172.16.127.255
-#                       First host:   172.16.0.1
-#                       Last host:    172.16.127.254
-#
-#           2. subnet:  Network addr: 172.16.128.0
-#                       Broadc. addr: 172.16.255.255
-#                       First host:   172.16.128.1
-#                       Last host:    172.16.255.254
-#               
-#
-#   5)  If the number of subnets exceeds two, each subnet's
-#       data should be accessible on demand to keep things
-#       tidy and overseeable.
-#       Another example:
-#
-#           Original network: 172.16.0.0/16
-#           4 total subnets (3 demanded, 1 in reserve):
-#             –> New subnet mask: 255.255.192.0 (/18)
-#              Show addresses for subnet [1-4|Quit]: 3
-#
-#           3. subnet:  Network addr: 172.16.128.0
-#                       Broadc. addr: 172.16.191.255
-#                       First host:   172.16.128.1
-#                       Last host:    172.16.191.254
-#
-#              Show addresses for subnet [1-4|Quit]: Q
-#
-#           *** See you :) ***
-#
+        raise RuntimeError(
+            "Custom prefix must not be smaller than default prefix")
+        return ""
 
 
 def main():
-    ip = str(input(f"Enter IPv4 address: "))
-    mask = str(input(f"Enter subnet mask: "))
-    prefix = str(input(f"Enter prefix: "))
-    hosts = str(input(f"Enter desired host amount: "))
-    reserve_percentage = str(
-        input(f"Enter address reserve percentage [0-100]: "))
-    subnets = str(input(f"How many subnets do you need?: "))
-
-    if is_ipaddr_valid(ip):
-        print(f"\nIP address is valid:")
-        print(f"\tAddress class: {determine_addrclass(ip)[0]}")
-        print(f"\tDefault subnet mask: {determine_addrclass(ip)[1]}")
-        print(f"\tDefault prefix: {determine_addrclass(ip)[2]}")
-    else:
-        print(f"\nIP address is invalid!")
-
-    if is_subnetmask_valid(mask):
-        print(f"\nSubnet mask is valid.")
-    else:
-        print(f"\nSubnet mask is invalid!")
-
-    if is_prefix_valid(prefix):
-        print(f"\nPrefix is valid.")
-        print(
-            f"Corresponding subnet mask: {convert_prefix_to_subnetmask(prefix)}")
-    else:
-        print(f"\nPrefix is invalid!")
-
-    if hosts.isdigit():
-
-        if reserve_percentage.isdigit() and int(reserve_percentage) in range(0, 101):
-            reserve_percentage = int(reserve_percentage)
-        else:
-            reserve_percentage = 0
-
-        hosts = int(hosts)
-        subnetmasks = get_new_subnetmask_using_hostnum(
-            hosts, reserve_percentage)
-        new_mask = subnetmasks[0]
-        new_mask_reserve_incl = subnetmasks[1]
-        new_prefix = convert_subnetmask_to_prefix(new_mask)
-        new_prefix_reserve_incl = convert_subnetmask_to_prefix(
-            new_mask_reserve_incl)
-
-        print(f"Host-based subnet mask recommendation for {hosts} hosts:")
-        print(f"\tOn demand: {new_mask}")
-        print(
-            f"\tWith reserve of {reserve_percentage}%: {new_mask_reserve_incl}")
-
-    else:
-        print(f"\nInvalid host amount!")
-
-    if subnets.isdigit():
-        subnets = int(subnets)
-        masks = get_new_subnetmask_using_netnum(
-            subnets, ip, reserve_percentage)
-        print(f"On-demand subnet mask for {subnets} subnets: {masks[0]}")
-        print(f"With reserve of {reserve_percentage}%: {masks[1]}")
-    else:
-        print(f"\Invalid subnet amount!")
+    bin_ip_octets = ["11000000", "00111100", "00000000", "00000001"]
+    print(convert_octets_bin_to_dec(bin_ip_octets))
+    print(convert_octets_dec_to_bin("172.60.0.1"))
+    print(calculate_prefix(256))
 
 
 if __name__ == "__main__":
