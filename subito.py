@@ -333,11 +333,12 @@ def convert_subnetmask_to_prefix(mask: str) -> int:
 # Convert prefix to subnet mask.
 # Only applicable to validated prefixes!
 #
-# FIXME
+# TESTED: OK
 #
-def convert_prefix_to_subnetmask(prefix: str) -> str:
-    binary_prefix = (int(prefix) * "1").ljust(32, "0")
-    return convert_binstr_to_octetstr(binary_prefix)
+def convert_prefix_to_subnetmask(prefix: int) -> str:
+    bin_prefix = ("1" * prefix).ljust(32, "0")
+    bin_octets = [bin_prefix[n:n+8] for n in range(0, 25, 8)]
+    return convert_octets_bin_to_dec(bin_octets)
 
 
 ###
@@ -388,13 +389,8 @@ def convert_octets_bin_to_dec(bin_octets: list[str]) -> str:
 # TESTED: OK
 #
 def convert_octets_dec_to_bin(dec_octet_str: str) -> list[str]:
-    bin_octets = []
     dec_octets = retrieve_octets(dec_octet_str)
-
-    for dec_octet in dec_octets:
-        bin_octets.append((bin(dec_octet)[2:]).rjust(8, "0"))
-
-    return bin_octets
+    return [(bin(dec_octet)[2:]).rjust(8, "0") for dec_octet in dec_octets]
 
 
 ###
@@ -407,43 +403,50 @@ def convert_octets_dec_to_bin(dec_octet_str: str) -> list[str]:
 #   resulting in 256 total addresses per block (with 254 usable hosts).
 #
 #   The next subnet address would be 172.16.1.0, because we have a
-#   carry-bit stepping from 255 (host broadcast) to 0 (next network):
+#   carry-bit when stepping from 255 (host broadcast) to 0 (next network):
 #
 #                       Mask: 255.255.1111 1111.0000 0000 (255.255.255.0)
 #      Broadcast, 1st subnet: 172. 16.0000 0000.1111 1111 (172.16.0.255)
 #       Net addr, 2nd subnet: 172. 16.0000 0001.0000 0000 (172.16.1.0)
 #
+# TESTED: OK
+#
 def determine_succeeding_subnet(net_addr: str, custom_prefix: int) -> str:
     default_prefix = int(determine_addrclass(net_addr)[2])
+    bin_host_blocksize = 32 - custom_prefix
+    total_hosts_per_block = 2 ** bin_host_blocksize
+    bin_net_addr = ""
 
-    if custom_prefix >= default_prefix:
-        binary_host_blocksize = 32 - custom_prefix
-        max_hosts_per_block = 2 ** binary_host_blocksize
+    # Create two binary strings (without separation markers!).
+    # The first contains the network's IP address and
+    # the second the 'total_hosts_per_block'.
+    # They have to be added binary and then retransformed into
+    # a decimal IP address string:
+    bin_net_octets = convert_octets_dec_to_bin(net_addr)
+    bin_total_hosts_per_block = (bin(total_hosts_per_block)[2:]).rjust(32, "0")
 
-        # Create two binary strings (without separation markers!).
-        # The first contains the network's IP address and
-        # the second the 'max_hosts_per_block'.
-        # They have to be added binary and then retransformed into
-        # a decimal IP address string:
-        binary_net_addr = convert_octetstr_to_binstr(net_addr)
-        binary_max_hosts_per_block = convert_byte_dec_to_bin(
-            max_hosts_per_block)
+    # Concatenate the dedicated binary octets to a full binary string
+    for bin_octet in bin_net_octets:
+        bin_net_addr += bin_octet
 
-        # With this we fill 'binary_max_hosts_per_block' up left with
-        # zeros, such that we can perform bitwise addition
-        binary_max_hosts_per_block = binary_max_hosts_per_block.rjust(32, "0")
+    # Perform the actual binary addition
+    bin_succeeding_subnet_addr = bin(
+        int(bin_net_addr, 2) + int(bin_total_hosts_per_block, 2))[2:]
 
-    else:
-        raise RuntimeError(
-            "Custom prefix must not be smaller than default prefix")
-        return ""
+    bin_succeeding_subnet_octets = [
+        bin_succeeding_subnet_addr[n:n+8] for n in range(0, 25, 8)]
+
+    return convert_octets_bin_to_dec(bin_succeeding_subnet_octets)
 
 
 def main():
-    bin_ip_octets = ["11000000", "00111100", "00000000", "00000001"]
+    bin_ip_octets = ["11100000", "00111101", "00000010", "10000001"]
     print(convert_octets_bin_to_dec(bin_ip_octets))
-    print(convert_octets_dec_to_bin("172.60.0.1"))
+    print(convert_octets_dec_to_bin("172.61.3.10"))
     print(calculate_prefix(256))
+    print(convert_subnetmask_to_prefix("255.255.192.0"))
+    print(convert_prefix_to_subnetmask(29))
+    print(determine_succeeding_subnet("172.16.1.80", 30))
 
 
 if __name__ == "__main__":
