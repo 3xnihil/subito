@@ -318,25 +318,19 @@ def determine_addrclass(ip: str) -> list[str]:
 
 
 ###
-# Convert subnet mask to prefix.
+# Convert subnet mask (regular octet string) to prefix.
 # Only applicable to already validated mask-strings!
 #
 # TESTED: OK
 #
 def convert_subnetmask_to_prefix(mask: str) -> int:
-    binary_prefix_str = ""
-    decimal_octets = retrieve_octets(mask)
-
-    # Convert decimals to binaries.
-    # The amount of '1's corresponds to the prefix.
-    for dec_octet in decimal_octets:
-        binary_prefix_str += bin(dec_octet)[2:]
-
-    return binary_prefix_str.count("1")
+    dec_octets = retrieve_octets(mask)
+    return "".join([(bin(dec_octet)[2:]).rjust(8, "0")
+                    for dec_octet in dec_octets]).count("1")
 
 
 ###
-# Convert prefix to subnet mask.
+# Convert prefix to subnet mask (human-readable octets).
 # Only applicable to validated prefixes!
 #
 # TESTED: OK
@@ -344,7 +338,7 @@ def convert_subnetmask_to_prefix(mask: str) -> int:
 def convert_prefix_to_subnetmask(prefix: int) -> str:
     bin_prefix = ("1" * prefix).ljust(32, "0")
     bin_octets = [bin_prefix[n:n+8] for n in range(0, 25, 8)]
-    return convert_octets_bin_to_dec(bin_octets)
+    return ".".join([str(int(bin_octet, 2)) for bin_octet in bin_octets])
 
 
 ###
@@ -353,49 +347,54 @@ def convert_prefix_to_subnetmask(prefix: int) -> str:
 # It is calculated by subtracting the binary block length of
 # the maximum host amount from the entire block length of an
 # IPv4 address, which equals 32.
-# Important: Adding '2' to the host amount takes care of
-# both network and broadcast addresses.
 #
 # TESTED: OK
 #
 def calculate_prefix(n_hosts: int) -> int:
-    binary_host_blocksize = len(bin(n_hosts+2)[2:])
+    binary_host_blocksize = len(bin(n_hosts)[2:])
     return 32 - binary_host_blocksize
 
 
 ###
-# Converting a binary octet list back to a string in
-# human-readable decimal octet format
+# Converting a binary 32-char string (representing 32 bits)
+# back to a string in human-readable decimal octet format
 # with separation marks (dot notation).
 #
 # TESTED: OK
 #
-def convert_octets_bin_to_dec(bin_octets: list[str]) -> str:
+def convert_32_bitstr_to_octetstr(bin_str: str) -> str:
+    bin_octets = [bin_str[n:n+8] for n in range(0, 25, 8)]
     dec_octets = [int(bin_octet, 2) for bin_octet in bin_octets]
-    octet_str = ""
-
-    # Recombine the decimal octets to a complete string
-    for dec_octet in dec_octets:
-        octet_str += f"{dec_octet}."
-
-    # Remove the last dot when returning the string
-    return octet_str[:-1]
+    return ".".join([str(dec_octet) for dec_octet in dec_octets])
 
 
 ###
-# Convert decimal octet string (i.e. IPv4 address or subnet mask)
-# into a list, containing each octet as a binary string.
+# Converting a human-readable octet string (of an IP address or
+# subnet mask) to a binary 32-char string (representing 32 bits).
+# The output binary string does not contain any separators and
+# only '1's and '0's.
 #
 # TESTED: OK
 #
-def convert_octets_dec_to_bin(dec_octet_str: str) -> list[str]:
-    dec_octets = retrieve_octets(dec_octet_str)
-    return [(bin(dec_octet)[2:]).rjust(8, "0") for dec_octet in dec_octets]
+def convert_octetstr_to_32_bitstr(octet_str: str) -> str:
+    dec_octets = retrieve_octets(octet_str)
+    bin_octets = [(bin(dec_octet)[2:]).rjust(8, "0")
+                  for dec_octet in dec_octets]
+    return "".join(bin_octets)
 
 
 ###
-# When creating subnets, we can easily determine the next subnet's
-# address by adding the entire subnet's blocksize (all host addresses
+# Determines all relevant data points of any given network:
+#   1)  Its own address of course,
+#   2)  its own subnet mask,
+#   3)  its first host address,
+#   4)  its last host address,
+#   5)  its broadcast address and finally
+#   6)  the address of its successor network.
+#
+# All of these data point we can figure out easily.
+# I.e. when creating subnets, we are able to determine the next subnet's
+# address by just adding the entire subnet's blocksize (all host addresses
 # including network and broadcast) to the previous subnet's address.
 #
 # Example: 172.16.0.0/24; class B net with original prefix /16 provides
@@ -409,35 +408,46 @@ def convert_octets_dec_to_bin(dec_octet_str: str) -> list[str]:
 #      Broadcast, 1st subnet: 172. 16.0000 0000.1111 1111 (172.16.0.255)
 #       Net addr, 2nd subnet: 172. 16.0000 0001.0000 0000 (172.16.1.0)
 #
-# By transforming the IP octet string into a binary string
-# without separation markers,
-# it can be converted to an integer such that it is simply added to the
-# subnet's block size ('total_hosts_per_block')
-#
-# The resulting integer is converted to a binary string
-# which becomes again retransformed into a decimal IP octet string,
-# now designating the succeeding (sub)net address.
-#
 # TESTED: OK
 #
-def determine_succeeding_subnet(net_addr: str, custom_prefix: int) -> str:
+def calculate_subnet(net_addr: str, custom_prefix: int) -> list[str]:
     host_blocksize = 32 - custom_prefix
     total_hosts_per_block = 2 ** host_blocksize
-    bin_net_octets = convert_octets_dec_to_bin(net_addr)
-    bin_net_addr = ""
+    max_hosts_per_block = 2 ** host_blocksize - 2
+    bin_net_addr = convert_octetstr_to_32_bitstr(net_addr)
 
-    # Concatenate the dedicated binary octets to a full binary string
-    for bin_octet in bin_net_octets:
-        bin_net_addr += bin_octet
-
-    # Perform the actual addition
+    # Address of the next (succeeding) subnet
     bin_succeeding_subnet_addr = bin(
         int(bin_net_addr, 2) + total_hosts_per_block)[2:]
 
-    bin_succeeding_subnet_octets = [
-        bin_succeeding_subnet_addr[n:n+8] for n in range(0, 25, 8)]
+    # Get the first host address of the current subnet
+    bin_first_host_addr = bin(int(bin_net_addr, 2) + 1)[2:]
 
-    return convert_octets_bin_to_dec(bin_succeeding_subnet_octets)
+    # Get the last host address of the current subnet
+    bin_last_host_addr = bin(
+        int(bin_net_addr, 2) + max_hosts_per_block)[2:]
+
+    # Now, determine current net's broadcast address
+    bin_broadcast_addr = bin(
+        int(bin_net_addr, 2) + max_hosts_per_block + 1)[2:]
+
+    # The binary 32-bit address strings have to be
+    # retransformed into human-readable octet strings:
+    succeeding_subnet_addr = convert_32_bitstr_to_octetstr(
+        bin_succeeding_subnet_addr)
+    first_host_addr = convert_32_bitstr_to_octetstr(bin_first_host_addr)
+    last_host_addr = convert_32_bitstr_to_octetstr(bin_last_host_addr)
+    broadcast_addr = convert_32_bitstr_to_octetstr(bin_broadcast_addr)
+
+    # Finally, provide the subnet mask
+    subnetmask = convert_prefix_to_subnetmask(custom_prefix)
+
+    return [net_addr,
+            subnetmask,
+            first_host_addr,
+            last_host_addr,
+            broadcast_addr,
+            succeeding_subnet_addr]
 
 
 ##########################################################################
@@ -468,11 +478,11 @@ def ask_net_addr() -> str:
 
         else:
             print(f"–> Class D, E and link-local addresses "
-                  f"(127.x.x.x) are forbidden!")
-            print(f"Suitable for subnetting:"
-                  f"\n\tClasses A (1-126.x.x.x),"
-                  f"\n\tB (128-191.x.x.x) and"
-                  f"\n\tC (192-223.x.x.x).\n")
+                  f"(127.x.x.x) are forbidden!\n"
+                  f"Suitable for subnetting are the classes\n"
+                  f"\tA (1-126.x.x.x),\n"
+                  f"\tB (128-191.x.x.x) and\n"
+                  f"\tC (192-223.x.x.x).\n")
             return ask_net_addr()
 
     else:
@@ -481,15 +491,97 @@ def ask_net_addr() -> str:
 
 
 ###
+# Core function, performs the actual subnetting.
+# Before we can start, we have to bring the
+# subnets in a suitable order, beginning with
+# the shortest prefix (largest network) and
+# finalizing with the longest (smallest network).
+#
+# The succeeding network always has the first address
+# of the next free address block determined by
+# the preceeding network.
+#
+# The input list 'host_amounts' is
+# delivered by the 'input_config()' function
+# and contains the final amount of hosts per
+# network. From these, any necessary prefix can
+# be calculated; enabling us to say how long a
+# host address block has to become.
+#
+# => It returns a list, containing all subnets'
+# information lists (see 'calculate_subnet()')
+# put into a single, super-ordinated list;
+# ordered beginning from the largest network
+# down to the smallest.
+#
+# TESTED: OK
+#
+def create_subnetting_list(orig_net_addr: str, host_amounts: list[int]) -> list[list]:
+    prefixes = [calculate_prefix(host_amnt) for host_amnt in host_amounts]
+    prefixes.sort()
+
+    # Initial starting point: the original network address
+    subnet_configs = [calculate_subnet(orig_net_addr, prefixes[0])]
+
+    # Caution: A list comprehension will not work here, because it deletes the initial
+    # network starting point from the line above!
+    for i in range(1, len(prefixes)):
+        subnet_configs.append(calculate_subnet(
+            subnet_configs[i-1][-1], prefixes[i]))
+
+    return subnet_configs
+
+
+###
+# Ask for subnet configuration contained in a string.
+#
+# FIXME: Under construction!
+#
+def ask_subnets() -> list:
+    hint_msg = (f"\n–> Suppose, you'd need 5 subnets in total.\n"
+                f"These are called your on-demand subnets.\n"
+                f"  2 of them are point-to-point networks,\n"
+                f"  3 of them should contain 150 hosts with "
+                f"20% reserve,\n"
+                f"  the remaining address space is in reserve.\n\n"
+                f"For this choice, you'd enter: 2:0(2),150:20(3)\n\n"
+                f"Syntax: <hosts on-demand>:<reserve percent> "
+                f"(<'n' configs>)\n\n"
+                f"  The round brackets may be omitted if only "
+                f"one subnet of\n"
+                f"  this configuration is wished-for. "
+                f"Each config block has\n"
+                f"  to be separated by colon from another.\n")
+
+    example_choice = str(input(f"\nConfiguration:\n"
+                               f"Enter desired "
+                               f"host count AND "
+                               f"reserve percentage PER EACH "
+                               f"'on-demand' subnet.\n"
+                               f"Give example? [y/N]: "))
+
+    if example_choice.isalnum() and example_choice[0].upper() == "Y":
+        print(hint_msg)
+
+    user_config = str(input(f"Enter config string [#:#(#)]: "))
+
+    # FIXME: Filter string by a regex!
+
+    return []
+
+
+###
 # Asking all configuration options from the user.
 #
 def input_config() -> list:
     orig_net_addr = ask_net_addr()
-    return [orig_net_addr]
+    chosen_subnet_configs = ask_subnets()
+    return [orig_net_addr, chosen_subnet_configs]
 
 
 def main():
-    net_config = input_config()
+    print(create_subnetting_list("172.16.0.0", [2, 2, 14, 62, 254]))
+    # net_config = input_config()
 
 
 if __name__ == "__main__":
