@@ -516,15 +516,17 @@ def ask_net_addr() -> str:
 #
 # TESTED: OK
 #
-def create_subnetting_list(orig_net_addr: str, host_amounts: list[int]) -> list[list]:
+def create_subnetting_list(orig_net_addr: str,
+                           host_amounts: list[int]) -> list[list]:
     prefixes = [calculate_prefix(host_amnt) for host_amnt in host_amounts]
     prefixes.sort()
 
     # Initial starting point: the original network address
     subnet_configs = [calculate_subnet(orig_net_addr, prefixes[0])]
 
-    # Caution: A list comprehension will not work here, because it deletes the initial
-    # network starting point from the line above!
+    # Caution: A list comprehension will not work here,
+    # because it deletes the initial network starting point
+    # from the line above!
     for i in range(1, len(prefixes)):
         subnet_configs.append(calculate_subnet(
             subnet_configs[i-1][-1], prefixes[i]))
