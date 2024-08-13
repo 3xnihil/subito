@@ -119,6 +119,7 @@ from math import ceil
 # For many of the tasks shown here we need a function extracting
 # the numerical octets from a valid(!) IP string.
 # => Returns a list with the four octets as integers.
+#
 # TESTED: OK
 #
 def retrieve_octets(valid_octet_str: str) -> list[int]:
@@ -365,14 +366,8 @@ def calculate_prefix(n_hosts: int) -> int:
 # TESTED: OK
 #
 def convert_octets_bin_to_dec(bin_octets: list[str]) -> str:
-    dec_octets = [0] * 4
+    dec_octets = [int(bin_octet, 2) for bin_octet in bin_octets]
     octet_str = ""
-
-    # Convert each byte bitwise to its decimal value
-    for (nth_octet, bin_octet) in enumerate(bin_octets):
-        bin_octet = bin_octet[::-1]
-        for (n, bit) in enumerate(bin_octet):
-            dec_octets[nth_octet] += int(bit) * 2 ** n
 
     # Recombine the decimal octets to a complete string
     for dec_octet in dec_octets:
@@ -409,29 +404,30 @@ def convert_octets_dec_to_bin(dec_octet_str: str) -> list[str]:
 #      Broadcast, 1st subnet: 172. 16.0000 0000.1111 1111 (172.16.0.255)
 #       Net addr, 2nd subnet: 172. 16.0000 0001.0000 0000 (172.16.1.0)
 #
+# By transforming the IP octet string into a binary string
+# without separation markers,
+# it can be converted to an integer such that it is simply added to the
+# subnet's block size ('total_hosts_per_block')
+#
+# The resulting integer is converted to a binary string
+# which becomes again retransformed into a decimal IP octet string,
+# now designating the succeeding (sub)net address.
+#
 # TESTED: OK
 #
 def determine_succeeding_subnet(net_addr: str, custom_prefix: int) -> str:
-    default_prefix = int(determine_addrclass(net_addr)[2])
-    bin_host_blocksize = 32 - custom_prefix
-    total_hosts_per_block = 2 ** bin_host_blocksize
-    bin_net_addr = ""
-
-    # Create two binary strings (without separation markers!).
-    # The first contains the network's IP address and
-    # the second the 'total_hosts_per_block'.
-    # They have to be added binary and then retransformed into
-    # a decimal IP address string:
+    host_blocksize = 32 - custom_prefix
+    total_hosts_per_block = 2 ** host_blocksize
     bin_net_octets = convert_octets_dec_to_bin(net_addr)
-    bin_total_hosts_per_block = (bin(total_hosts_per_block)[2:]).rjust(32, "0")
+    bin_net_addr = ""
 
     # Concatenate the dedicated binary octets to a full binary string
     for bin_octet in bin_net_octets:
         bin_net_addr += bin_octet
 
-    # Perform the actual binary addition
+    # Perform the actual addition
     bin_succeeding_subnet_addr = bin(
-        int(bin_net_addr, 2) + int(bin_total_hosts_per_block, 2))[2:]
+        int(bin_net_addr, 2) + total_hosts_per_block)[2:]
 
     bin_succeeding_subnet_octets = [
         bin_succeeding_subnet_addr[n:n+8] for n in range(0, 25, 8)]
@@ -446,7 +442,7 @@ def main():
     print(calculate_prefix(256))
     print(convert_subnetmask_to_prefix("255.255.192.0"))
     print(convert_prefix_to_subnetmask(29))
-    print(determine_succeeding_subnet("172.16.1.80", 30))
+    print(determine_succeeding_subnet("172.16.0.0", 25))
 
 
 if __name__ == "__main__":
