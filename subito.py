@@ -110,9 +110,14 @@
 #           c) Converting a subnet mask to a prefix and vice versa;
 #           d) Determining the class of an IPv4 address and to which
 #               use cases it is applicable, etc ...
-###
 
-from math import ceil
+
+#####################################################################
+#                                                                   #
+# Internal functions without special error handling, expecting      #
+# validated inputs (except for the validator functions of course ;) #
+#                                                                   #
+#####################################################################
 
 
 ###
@@ -435,14 +440,56 @@ def determine_succeeding_subnet(net_addr: str, custom_prefix: int) -> str:
     return convert_octets_bin_to_dec(bin_succeeding_subnet_octets)
 
 
+##########################################################################
+#                                                                        #
+# User functions with error handling for safe input ("Gorilla-proof") ;) #
+#                                                                        #
+##########################################################################
+
+###
+# Asking for the original network's IP address.
+# If the user makes an input mistake, the function calls itself;
+# hoping, no real gorilla sitting in front of the machine ^^
+#
+# TESTED: OK
+#
+def ask_net_addr() -> str:
+    entered_addr = str(input(f"Original network's address [#.#.#.#]: "))
+
+    if is_ipaddr_valid(entered_addr):
+        addrclass = determine_addrclass(entered_addr)[0]
+        default_prefix = determine_addrclass(entered_addr)[2]
+        first_octet = int(retrieve_octets(entered_addr)[0])
+
+        if addrclass in "ABC" and first_octet != 127:
+            print(f"–> Class is {addrclass}. "
+                  f"Default prefix: /{default_prefix}")
+            return entered_addr
+
+        else:
+            print(f"–> Class D, E and link-local addresses "
+                  f"(127.x.x.x) are forbidden!")
+            print(f"Suitable for subnetting:"
+                  f"\n\tClasses A (1-126.x.x.x),"
+                  f"\n\tB (128-191.x.x.x) and"
+                  f"\n\tC (192-223.x.x.x).\n")
+            return ask_net_addr()
+
+    else:
+        print(f"–> No valid IP address.\n Please, try again ...\n")
+        return ask_net_addr()
+
+
+###
+# Asking all configuration options from the user.
+#
+def input_config() -> list:
+    orig_net_addr = ask_net_addr()
+    return [orig_net_addr]
+
+
 def main():
-    bin_ip_octets = ["11100000", "00111101", "00000010", "10000001"]
-    print(convert_octets_bin_to_dec(bin_ip_octets))
-    print(convert_octets_dec_to_bin("172.61.3.10"))
-    print(calculate_prefix(256))
-    print(convert_subnetmask_to_prefix("255.255.192.0"))
-    print(convert_prefix_to_subnetmask(29))
-    print(determine_succeeding_subnet("172.16.0.0", 25))
+    net_config = input_config()
 
 
 if __name__ == "__main__":
