@@ -589,7 +589,7 @@ def retrieve_hosts_per_network(user_config_str: str) -> list[int]:
             reserve_percentage = int(conf[conf.index(":")+1:conf.index("(")])
             x_times = int(conf[conf.index("(")+1:conf.index(")")])
             total = (ondemand_hosts +
-                ceil(ondemand_hosts * (reserve_percentage/100)))
+                     ceil(ondemand_hosts * (reserve_percentage/100)))
             for _ in range(x_times-1):
                 total_hosts.append(total)
 
@@ -599,14 +599,13 @@ def retrieve_hosts_per_network(user_config_str: str) -> list[int]:
     else:
         return []
 
+
 ###
 # Ask for subnet configuration contained in a string.
 #
-# FIXME: Under construction!
+# TESTED: OK
 #
-
-
-def ask_subnets() -> list:
+def ask_subnets() -> list[int]:
     hint_msg = (f"\n–> Suppose, you'd need 5 subnets in total.\n"
                 f"These are called your on-demand subnets.\n"
                 f"  2 of them are point-to-point networks,\n"
@@ -619,8 +618,8 @@ def ask_subnets() -> list:
                 f"  The round brackets may be omitted if only "
                 f"one subnet of\n"
                 f"  this configuration is wished-for. "
-                f"Each config block has\n"
-                f"  to be separated by colon from another.\n")
+                f"Each config block may\n"
+                f"  be separated by colon from another.\n")
 
     example_choice = str(input(f"\nConfiguration:\n"
                                f"Enter desired "
@@ -633,10 +632,15 @@ def ask_subnets() -> list:
         print(hint_msg)
 
     user_config = str(input(f"Enter config string [#:#(#)]: "))
+    user_config = retrieve_hosts_per_network(user_config)
 
-    # FIXME: Filter string by a regex!
+    if len(user_config) == 0:
+        print(f"You have to provide at least two subnet configs!\n"
+              f" –> i.e. '160:40, 50:25' or '160:40(2)'")
+        return ask_subnets()
 
-    return []
+    else:
+        return user_config
 
 
 ###
@@ -650,8 +654,10 @@ def input_config() -> list:
 
 def main():
     # print(create_subnetting_list("172.16.0.0", [2, 2, 14, 62, 254]))
-    print(retrieve_hosts_per_network("512:10(0), 12050, 30:10(4)"))
+    # print(retrieve_hosts_per_network("512:10(0), 12050, 30:10(4)"))
     # net_config = input_config()
+    total_hosts = ask_subnets()
+    print(total_hosts)
 
 
 if __name__ == "__main__":
