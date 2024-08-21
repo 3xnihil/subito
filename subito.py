@@ -535,10 +535,69 @@ def create_subnetting_list(orig_net_addr: str,
 
 
 ###
+# Extracting the data from the user's input config string.
+# This string is of the form "#:#(#)", where "#" stands for
+# any integer and round brackets may be omitted (if omitted,
+# it just says we have only one network of this configuration).
+# The first place before ":" denotes the currently demanded
+# amount of hosts, while the place after ":" implies how big
+# the reserve in percent should be (and therefore, on how many
+# total hosts should be taken care of, since the host-blocksize of
+# the subnet is to be oriented at the total size).
+# => Via regular expression (regex) we can easily extract all
+# valid patterns for host configs. Invalid ones will be ignored
+# silently (the user most probably will detect any errors on the
+# summary presented later on).
+# ==> The function returns a list containing all resulting total
+# host counts. Its length corresponds to the amount of subnets.
+#
+# TESTED: OK
+#
+def retrieve_hosts_per_network(user_config_str: str) -> list[int]:
+    import re
+    from math import ceil
+
+    regex_single_configs = re.compile(r'[0-9]+\:[0-9]+')
+    regex_multi_configs = re.compile(r'[0-9]+\:[0-9]+\([0-9]+\)')
+
+    single_configs = re.findall(regex_single_configs, user_config_str)
+    multi_configs = re.findall(regex_multi_configs, user_config_str)
+
+    total_hosts = []
+
+    # The user config is taken seriously if at least two single-host ("#:#")
+    # OR at least one multi-host config ("#:#(#)") could be found.
+    # In this case, we can extract the data and calculate the desired
+    # total host amounts:
+    if len(single_configs) >= 2 or len(multi_configs) >= 1:
+        for conf in single_configs:
+            ondemand_hosts = int(conf[:conf.index(":")])
+            reserve_percentage = int(conf[conf.index(":")+1:])
+            total_hosts.append(
+                ondemand_hosts + ceil(ondemand_hosts * (reserve_percentage/100)) + 2)
+
+        for conf in multi_configs:
+            ondemand_hosts = int(conf[:conf.index(":")])
+            reserve_percentage = int(conf[conf.index(":")+1:conf.index("(")])
+            x_times = int(conf[conf.index("(")+1:conf.index(")")])
+            total = ondemand_hosts + \
+                ceil(ondemand_hosts * (reserve_percentage/100) + 2)
+            for _ in range(x_times-1):
+                total_hosts.append(total)
+
+        return total_hosts
+
+    # Either no valid pattern found or config insufficient:
+    else:
+        return []
+
+###
 # Ask for subnet configuration contained in a string.
 #
 # FIXME: Under construction!
 #
+
+
 def ask_subnets() -> list:
     hint_msg = (f"\n–> Suppose, you'd need 5 subnets in total.\n"
                 f"These are called your on-demand subnets.\n"
@@ -582,7 +641,8 @@ def input_config() -> list:
 
 
 def main():
-    print(create_subnetting_list("172.16.0.0", [2, 2, 14, 62, 254]))
+    # print(create_subnetting_list("172.16.0.0", [2, 2, 14, 62, 254]))
+    print(retrieve_hosts_per_network("512:10(0), 12050, 30:10(4)"))
     # net_config = input_config()
 
 
