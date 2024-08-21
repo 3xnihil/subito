@@ -544,12 +544,20 @@ def create_subnetting_list(orig_net_addr: str,
 # the reserve in percent should be (and therefore, on how many
 # total hosts should be taken care of, since the host-blocksize of
 # the subnet is to be oriented at the total size).
+#
 # => Via regular expression (regex) we can easily extract all
 # valid patterns for host configs. Invalid ones will be ignored
 # silently (the user most probably will detect any errors on the
 # summary presented later on).
+#
 # ==> The function returns a list containing all resulting total
 # host counts. Its length corresponds to the amount of subnets.
+#
+# IMPORTANT: A user must consider her-/himself whether to include
+#   network and broadcast address into their calculations!
+#   If a reserve pecentage is provided, this may not bother, but
+#   if no reserve (i.e. "120:0") is desired, it should be something
+#   to take care of!
 #
 # TESTED: OK
 #
@@ -574,14 +582,14 @@ def retrieve_hosts_per_network(user_config_str: str) -> list[int]:
             ondemand_hosts = int(conf[:conf.index(":")])
             reserve_percentage = int(conf[conf.index(":")+1:])
             total_hosts.append(
-                ondemand_hosts + ceil(ondemand_hosts * (reserve_percentage/100)) + 2)
+                ondemand_hosts + ceil(ondemand_hosts * (reserve_percentage/100)))
 
         for conf in multi_configs:
             ondemand_hosts = int(conf[:conf.index(":")])
             reserve_percentage = int(conf[conf.index(":")+1:conf.index("(")])
             x_times = int(conf[conf.index("(")+1:conf.index(")")])
-            total = ondemand_hosts + \
-                ceil(ondemand_hosts * (reserve_percentage/100) + 2)
+            total = (ondemand_hosts +
+                ceil(ondemand_hosts * (reserve_percentage/100)))
             for _ in range(x_times-1):
                 total_hosts.append(total)
 
