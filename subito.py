@@ -410,6 +410,14 @@ def convert_octetstr_to_32_bitstr(octet_str: str) -> str:
 #
 # TESTED: OK
 #
+# /!\ CRUCIAL: After adding the binary integers, we MUST make sure that the
+#   resulting binary string is actually 32 characters long!
+#   Reason: If the binary IP string contains leading zeros, int() will
+#   stupidly cut them, resulting in an unvoluntary bit shift by the count
+#   of bits which have been cut by int() before!
+#   => Getting rid of this uninteded behaviour, I added the 'str.rjust()'
+#   string operation to make sure we refill any missing leading zeros.
+#
 def calculate_subnet(net_addr: str, custom_prefix: int) -> list[str]:
     host_blocksize = 32 - custom_prefix
     total_hosts_per_block = 2 ** host_blocksize
@@ -418,18 +426,18 @@ def calculate_subnet(net_addr: str, custom_prefix: int) -> list[str]:
 
     # Address of the next (succeeding) subnet
     bin_succeeding_subnet_addr = bin(
-        int(bin_net_addr, 2) + total_hosts_per_block)[2:]
+        int(bin_net_addr, 2) + total_hosts_per_block)[2:].rjust(32, "0")
 
     # Get the first host address of the current subnet
-    bin_first_host_addr = bin(int(bin_net_addr, 2) + 1)[2:]
+    bin_first_host_addr = bin(int(bin_net_addr, 2) + 1)[2:].rjust(32, "0")
 
     # Get the last host address of the current subnet
     bin_last_host_addr = bin(
-        int(bin_net_addr, 2) + max_hosts_per_block)[2:]
+        int(bin_net_addr, 2) + max_hosts_per_block)[2:].rjust(32, "0")
 
     # Now, determine current net's broadcast address
     bin_broadcast_addr = bin(
-        int(bin_net_addr, 2) + max_hosts_per_block + 1)[2:]
+        int(bin_net_addr, 2) + max_hosts_per_block + 1)[2:].rjust(32, "0")
 
     # The binary 32-bit address strings have to be
     # retransformed into human-readable octet strings:
@@ -501,14 +509,18 @@ def ask_net_addr() -> str:
 # of the next free address block determined by
 # the preceeding network.
 #
-# The input list 'host_amounts' is
+# The input list 'subnetting_userdata' is
 # delivered by the 'input_config()' function
-# and contains the final amount of hosts per
-# network. From these, any necessary prefix can
+# and contains:
+#  1. The original networks IP address;
+#  2. A list of the total hosts, which's length
+#     represents the amount of subnets.
+#
+# From the host counts, any necessary prefix can
 # be calculated; enabling us to say how long a
 # host address block has to become.
 #
-# => It returns a list, containing all subnets'
+# => The function returns a list, containing all subnets'
 # information lists (see 'calculate_subnet()')
 # put into a single, super-ordinated list;
 # ordered beginning from the largest network
@@ -516,8 +528,9 @@ def ask_net_addr() -> str:
 #
 # TESTED: OK
 #
-def create_subnetting_list(orig_net_addr: str,
-                           host_amounts: list[int]) -> list[list]:
+def create_subnetting_list(subnetting_userdata: list) -> list[list]:
+    orig_net_addr = subnetting_userdata[0]
+    host_amounts = subnetting_userdata[1]
     prefixes = [calculate_prefix(host_amnt) for host_amnt in host_amounts]
     prefixes.sort()
 
@@ -555,9 +568,9 @@ def create_subnetting_list(orig_net_addr: str,
 #
 # IMPORTANT: A user must consider her-/himself whether to include
 #   network and broadcast address into their calculations!
-#   If a reserve pecentage is provided, this may not bother, but
+#   If a reserve percentage is provided, this may not bother, but
 #   if no reserve (i.e. "120:0") is desired, it should be something
-#   to take care of!
+#   definitely to take care of!
 #
 # TESTED: OK
 #
@@ -605,7 +618,7 @@ def retrieve_hosts_per_network(user_config_str: str) -> list[int]:
 #
 # TESTED: OK
 #
-def ask_subnets() -> list[int]:
+def ask_hosts_per_subnets() -> list[int]:
     hint_msg = (f"\n–> Suppose, you'd need 5 subnets in total.\n"
                 f"These are called your on-demand subnets.\n"
                 f"  2 of them are point-to-point networks,\n"
@@ -628,36 +641,80 @@ def ask_subnets() -> list[int]:
                                f"'on-demand' subnet.\n"
                                f"Give example? [y/N]: "))
 
-    if example_choice.isalnum() and example_choice[0].upper() == "Y":
+    if example_choice.isalpha() and example_choice[0].upper() == "Y":
         print(hint_msg)
 
-    user_config = str(input(f"Enter config string [#:#(#)]: "))
-    user_config = retrieve_hosts_per_network(user_config)
+    hosts_per_subnets = str(input(f"Enter config string [#:#(#)]: "))
+    hosts_per_subnets = retrieve_hosts_per_network(hosts_per_subnets)
 
-    if len(user_config) == 0:
+    if len(hosts_per_subnets) == 0:
         print(f"You have to provide at least two subnet configs!\n"
               f" –> i.e. '160:40, 50:25' or '160:40(2)'")
-        return ask_subnets()
+        return ask_hosts_per_subnets()
 
     else:
-        return user_config
+        return hosts_per_subnets
+
+
+###
+# Show a short comprehension (summary) of the demanded subnetting.
+#
+# FIXME: under construction
+#
+def print_summary(subnetting_list: list[list], hosts_per_subnets: list[int]) -> None:
+    total_subnets = len(subnetting_list)
+    print(f"Summary: Original network: "
+          f"{subnetting_list[0][0]}"
+          f"/{convert_subnetmask_to_prefix(subnetting_list[0][1])}\n"
+          f" {len(subnetting_list)} total subnets:")
+
+    for i in range(total_subnets):
+        print(f" {f'({i+1})'.ljust(len(f'{total_subnets}')+2)} "   # Network's number
+              f"foo")
+
+
+###
+# Show the resulting subnets, ordered from the
+# largest to the smallest networks:
+#
+def print_final_subnets(subnetting_list: list[list], user_net_host_config: list) -> None:
+    # Caution! The original list 'user_net_host_config' contains only two elements:
+    # the IP address of the network and a list with the actual host counts!
+    # Therefore, we have to extract that list first and arrange its items from
+    # the largest down to the smallest:
+    hosts_per_subnets = user_net_host_config[1]
+    hosts_per_subnets.sort()
+    hosts_per_subnets = hosts_per_subnets[::-1]
+    total_subnets = len(subnetting_list)
+
+    for (i, subnet) in enumerate(subnetting_list):
+        max_hosts = 2 ** len(bin(hosts_per_subnets[i])[2:]) - 2
+        print(f"Subnet ({i+1}):"
+              f"\tNetwork address: {subnet[0]}"
+              f"/{convert_subnetmask_to_prefix(subnet[1])} "
+              f"({max_hosts} hosts)\n"
+              f"\t\tSubnet mask: {subnet[1]}\n"
+              f"\t\tFirst host: {subnet[2]}\n"
+              f"\t\tLast host: {subnet[3]}\n"
+              f"\t\tBroadcast: {subnet[4]}\n")
 
 
 ###
 # Asking all configuration options from the user.
 #
+# TESTED: OK
+#
 def input_config() -> list:
     orig_net_addr = ask_net_addr()
-    chosen_subnet_configs = ask_subnets()
-    return [orig_net_addr, chosen_subnet_configs]
+    hosts_per_subnets = ask_hosts_per_subnets()
+    return [orig_net_addr, hosts_per_subnets]
 
 
 def main():
-    # print(create_subnetting_list("172.16.0.0", [2, 2, 14, 62, 254]))
-    # print(retrieve_hosts_per_network("512:10(0), 12050, 30:10(4)"))
-    # net_config = input_config()
-    total_hosts = ask_subnets()
-    print(total_hosts)
+    user_subnet_config = input_config()
+    subnet_specs = create_subnetting_list(user_subnet_config)
+    # print_summary(subnet_specs, user_subnet_config)
+    print_final_subnets(subnet_specs, user_subnet_config)
 
 
 if __name__ == "__main__":
