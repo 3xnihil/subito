@@ -657,18 +657,113 @@ def ask_hosts_per_subnets() -> list[int]:
 
 
 ###
+# Very important is the verification of the user's desired
+# configuration. It does not help anything if you have given
+# a class C network to manage - you won't be able to get
+# 10 subnets with 600 hosts, because with 4 borrow bits for
+# the subnets already in use, only 4 host bits remain; delimiting
+# your maximum host count per subnet up to 2⁴-2 = 14 hosts.
+#
+# Therefore, we need to calculate whether the provided net config
+# will be possible:
+#
+# 1)    Check the on-demand amount of networks and calculate the
+#       subnetting blocksize in bits.
+# 2)    Add this subnetting blocksize to the default prefix of the
+#       original network (i.e., if you have 192.168.10.0 and need
+#       3 subnets, this would be as follows:
+#           a) 192.x.x.x is a class C net with prefix /24;
+#           b) 3 desired subnets result in two borrow bits required (your
+#              subnetting bits);
+#           c) so we calculate 24+3 = 27 bits for the network blocksize.
+#           d) Therefore, we have 32-27 = 5 bits for the maximum
+#              host blocksize;
+#           e) resulting in 2⁵-2 = 30 hosts at max per subnet.
+# 3)    Finally, we check if the user's subnetting does respect
+#       these limitations on her/his original network:
+#           a) Is the largest given subnet capable of the desired
+#              amount of hosts?
+#               => Perform the steps in (2) and compare the block size
+#                  of the demanded total hosts (given by the user) to
+#                  the available host blocksize.
+#           b) If the answer to 3a) is NO, the demanded subnetting
+#              will not work.
+#           c) If the answer to 3a) is YES, we have to look whether
+#              the amount of subnets desired can be met by the blocksize
+#              of borrow bits (subnetting bits) available.
+#               => Calculate the borrow bit blocksize as in 2b).
+#                  - Add this blocksize to the default prefix as in 2c).
+#                  - Take the host blocksize from 3a) and add it to the
+#                  new network prefix.
+#                  - If the resulting number is larger than 32, we don't
+#                  have enough subnetting address space and the user's
+#                  config will not work.
+#           d) If the answer to 3c) is YES, the user's subnetting is
+#              sufficient and will work.
+#
+def validate_user_subnetting(user_net_host_config: list) -> list:
+    orig_net_addr = user_net_host_config[0]
+    hosts_per_subnets = user_net_host_config[1]
+
+    hosts_per_subnets.sort()
+    hosts_per_subnets = hosts_per_subnets[::-1]
+    user_hosts_demanded = hosts_per_subnets[0]
+    user_subnets_demanded = len(hosts_per_subnets)
+    blocksize_user_hosts = len(bin(user_hosts_demanded)[2:])
+    blocksize_user_subnets = len(bin(user_subnets_demanded)[2:])
+
+    default_prefix = int(determine_addrclass(orig_net_addr)[2])
+    blocksize_possible_hosts = 32 - (default_prefix + blocksize_user_subnets)
+    blocksize_possible_subnets = default_prefix - blocksize_user_hosts
+
+    possible_subnets = 2 ** blocksize_possible_subnets
+    possible_hosts = 2 ** blocksize_possible_hosts - 2
+
+    if (user_hosts_demanded <= possible_hosts
+            and user_subnets_demanded <= possible_subnets):
+        return [True, f" –> Subnetting config OK\n"]
+
+    elif (user_hosts_demanded > possible_hosts
+          and user_subnets_demanded <= possible_subnets):
+        err_msg = (f"{user_hosts_demanded} hosts exceed available "
+                   f"host blocksize of {blocksize_possible_hosts} bits "
+                   f"(= {possible_hosts} hosts)!\n"
+                   f" –> You'd need an upper class network for that "
+                   f"(> {determine_addrclass(orig_net_addr)[0]}).")
+        return [False, err_msg]
+
+    elif (user_hosts_demanded <= possible_hosts
+          and user_subnets_demanded > possible_subnets):
+        err_msg = (f"{user_subnets_demanded} subnets exceed available "
+                   f"borrow bits (only {blocksize_possible_subnets},\n"
+                   f"given you still want {user_hosts_demanded} hosts at max per subnet.")
+        return [False, err_msg]
+
+    else:
+        err_msg = (f"Sorry, your desired subnetting config is insufficient!\n"
+                   f" –> It exceeds both max capability in host and address space;\n"
+                   f"    given your original net, '{orig_net_addr}',"
+                   f" class {determine_addrclass(orig_net_addr)[0]}.")
+        return [False, err_msg]
+
+
+###
 # Show a short comprehension (summary) of the demanded subnetting.
 #
 # FIXME: under construction
 #
-def print_summary(subnetting_list: list[list], hosts_per_subnets: list[int]) -> None:
-    total_subnets = len(subnetting_list)
+def print_summary(subnetting_list: list[list], user_net_host_config: list) -> None:
+    hosts_per_subnets = user_net_host_config[1]
+    total_subnets = len(hosts_per_subnet)
+    hosts_per_subnets.sort()
+    hosts_per_subnets = hosts_per_subnets[::-1]
+
     print(f"Summary: Original network: "
           f"{subnetting_list[0][0]}"
           f"/{convert_subnetmask_to_prefix(subnetting_list[0][1])}\n"
           f" {len(subnetting_list)} total subnets:")
 
-    for i in range(total_subnets):
+    for (i, n_hosts) in enumerate(hosts_per_subnets):
         print(f" {f'({i+1})'.ljust(len(f'{total_subnets}')+2)} "   # Network's number
               f"foo")
 
@@ -676,6 +771,8 @@ def print_summary(subnetting_list: list[list], hosts_per_subnets: list[int]) -> 
 ###
 # Show the resulting subnets, ordered from the
 # largest to the smallest networks:
+#
+# TESTED: OK
 #
 def print_final_subnets(subnetting_list: list[list], user_net_host_config: list) -> None:
     # Caution! The original list 'user_net_host_config' contains only two elements:
@@ -693,10 +790,10 @@ def print_final_subnets(subnetting_list: list[list], user_net_host_config: list)
               f"\tNetwork address: {subnet[0]}"
               f"/{convert_subnetmask_to_prefix(subnet[1])} "
               f"({max_hosts} hosts)\n"
-              f"\t\tSubnet mask: {subnet[1]}\n"
-              f"\t\tFirst host: {subnet[2]}\n"
-              f"\t\tLast host: {subnet[3]}\n"
-              f"\t\tBroadcast: {subnet[4]}\n")
+              f"\t\tSubnet mask:\t{subnet[1]}\n"
+              f"\t\tFirst host:\t{subnet[2]}\n"
+              f"\t\tLast host:\t{subnet[3]}\n"
+              f"\t\tBroadcast:\t{subnet[4]}\n")
 
 
 ###
@@ -712,9 +809,16 @@ def input_config() -> list:
 
 def main():
     user_subnet_config = input_config()
-    subnet_specs = create_subnetting_list(user_subnet_config)
-    # print_summary(subnet_specs, user_subnet_config)
-    print_final_subnets(subnet_specs, user_subnet_config)
+    subnetting_check = validate_user_subnetting(user_subnet_config)
+
+    if subnetting_check[0]:
+        print(subnetting_check[1])
+        subnet_specs = create_subnetting_list(user_subnet_config)
+        # print_summary(subnet_specs, user_subnet_config)
+        print_final_subnets(subnet_specs, user_subnet_config)
+
+    else:
+        print(subnetting_check[1])
 
 
 if __name__ == "__main__":
