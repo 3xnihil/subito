@@ -797,6 +797,7 @@ def input_config() -> list:
 
 
 def main():
+    print(f"\n*** SUBito 0.2 – subnetting tool ***\n")
     user_subnet_config = input_config()
     subnetting_check = validate_user_subnetting(user_subnet_config)
 
