@@ -675,75 +675,64 @@ def ask_hosts_per_subnets() -> list[int]:
 #           a) 192.x.x.x is a class C net with prefix /24;
 #           b) 3 desired subnets result in two borrow bits required (your
 #              subnetting bits);
-#           c) so we calculate 24+3 = 27 bits for the network blocksize.
-#           d) Therefore, we have 32-27 = 5 bits for the maximum
+#           c) so we calculate 24+2 = 26 bits for the network blocksize.
+#           d) Therefore, we have 32-26 = 6 bits for the maximum
 #              host blocksize;
-#           e) resulting in 2⁵-2 = 30 hosts at max per subnet.
-# 3)    Finally, we check if the user's subnetting does respect
-#       these limitations on her/his original network:
-#           a) Is the largest given subnet capable of the desired
-#              amount of hosts?
-#               => Perform the steps in (2) and compare the block size
-#                  of the demanded total hosts (given by the user) to
-#                  the available host blocksize.
-#           b) If the answer to 3a) is NO, the demanded subnetting
-#              will not work.
-#           c) If the answer to 3a) is YES, we have to look whether
-#              the amount of subnets desired can be met by the blocksize
-#              of borrow bits (subnetting bits) available.
-#               => Calculate the borrow bit blocksize as in 2b).
-#                  - Add this blocksize to the default prefix as in 2c).
-#                  - Take the host blocksize from 3a) and add it to the
-#                  new network prefix.
-#                  - If the resulting number is larger than 32, we don't
-#                  have enough subnetting address space and the user's
-#                  config will not work.
-#           d) If the answer to 3c) is YES, the user's subnetting is
-#              sufficient and will work.
+#           e) resulting in 2⁶-2 = 62 hosts at max per subnet.
+# 3)    Check the on-demand amount of hosts, for which we only have
+#       to pick that of the largest demanded subnet, from which the
+#       blocksize is calculated as well.
+# 4)    Now, we subtract the default prefix from the entire 32-bit word,
+#       giving us the totally available block size for the subnetting.
+# 5)    If the subnetting is sufficient, subnet's blocksize
+#       plus host's blocksize will fit the available total blocksize.           
+#
+# TESTED: OK
 #
 def validate_user_subnetting(user_net_host_config: list) -> list:
     orig_net_addr = user_net_host_config[0]
-    hosts_per_subnets = user_net_host_config[1]
+    default_prefix = int(determine_addrclass(orig_net_addr)[2])
 
+    hosts_per_subnets = user_net_host_config[1]
     hosts_per_subnets.sort()
     hosts_per_subnets = hosts_per_subnets[::-1]
+
     user_hosts_demanded = hosts_per_subnets[0]
     user_subnets_demanded = len(hosts_per_subnets)
+
+    # When calculating the subnetting blocksize, we have to take
+    # care of the fact that you can create two subnets with
+    # 1 borrow bit, four with 2 borrow bits etc.
+    # => This is due to permutations, because we always start
+    # counting at zero.
+    # I.e., if we need four subnets, 4 = 0b100, including 3 bits.
+    # But we count from 0 to 3 in fact, such that 3 = 0b11
+    # only requires 2 bits actually.
+    # Therefore, we subtract 1 of the subnets which have been demanded.
+    #
+    # Speaking of the hosts, we don't have such a situation, since the
+    # first available host number is always reserved for the network's address.
+    #
     blocksize_user_hosts = len(bin(user_hosts_demanded)[2:])
-    blocksize_user_subnets = len(bin(user_subnets_demanded)[2:])
+    blocksize_user_subnets = len(bin(user_subnets_demanded - 1)[2:])
 
-    default_prefix = int(determine_addrclass(orig_net_addr)[2])
-    blocksize_possible_hosts = 32 - (default_prefix + blocksize_user_subnets)
-    blocksize_possible_subnets = default_prefix - blocksize_user_hosts
+    total_blocksize_available = 32 - default_prefix
+    total_blocksize_demanded = (
+        blocksize_user_subnets + blocksize_user_hosts)
 
-    possible_subnets = 2 ** blocksize_possible_subnets
-    possible_hosts = 2 ** blocksize_possible_hosts - 2
-
-    if (user_hosts_demanded <= possible_hosts
-            and user_subnets_demanded <= possible_subnets):
-        return [True, f" –> Subnetting config OK\n"]
-
-    elif (user_hosts_demanded > possible_hosts
-          and user_subnets_demanded <= possible_subnets):
-        err_msg = (f"{user_hosts_demanded} hosts exceed available "
-                   f"host blocksize of {blocksize_possible_hosts} bits "
-                   f"(= {possible_hosts} hosts)!\n"
-                   f" –> You'd need an upper class network for that "
-                   f"(> {determine_addrclass(orig_net_addr)[0]}).")
-        return [False, err_msg]
-
-    elif (user_hosts_demanded <= possible_hosts
-          and user_subnets_demanded > possible_subnets):
-        err_msg = (f"{user_subnets_demanded} subnets exceed available "
-                   f"borrow bits (only {blocksize_possible_subnets},\n"
-                   f"given you still want {user_hosts_demanded} hosts at max per subnet.")
-        return [False, err_msg]
+    if total_blocksize_demanded <= total_blocksize_available:
+        return [True, ""]
 
     else:
-        err_msg = (f"Sorry, your desired subnetting config is insufficient!\n"
-                   f" –> It exceeds both max capability in host and address space;\n"
-                   f"    given your original net, '{orig_net_addr}',"
-                   f" class {determine_addrclass(orig_net_addr)[0]}.")
+        err_msg = (f"Sorry, your config exceeds the available blocksize "
+                   f"of {total_blocksize_available} bits!\n"
+                   f"(i) Current config would require {total_blocksize_demanded} bits.\n"
+                   f" –> You have to do at least one of these tasks:\n"
+                   f"   a) Reduce the amount of hosts in your largest subnet,\n"
+                   f"   b) Reduce the amount of subnets or\n"
+                   f"   c) If possible, use an upper address class "
+                   f"(> {determine_addrclass(orig_net_addr)[0]}) "
+                   f"for your original network.\n")
         return [False, err_msg]
 
 
@@ -812,7 +801,6 @@ def main():
     subnetting_check = validate_user_subnetting(user_subnet_config)
 
     if subnetting_check[0]:
-        print(subnetting_check[1])
         subnet_specs = create_subnetting_list(user_subnet_config)
         # print_summary(subnet_specs, user_subnet_config)
         print_final_subnets(subnet_specs, user_subnet_config)
