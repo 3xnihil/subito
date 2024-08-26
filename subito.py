@@ -569,14 +569,14 @@ def create_subnetting_list(subnetting_userdata: list) -> list[list]:
 # IMPORTANT: A user must consider her-/himself whether to include
 #   network and broadcast address into their calculations!
 #   If a reserve percentage is provided, this may not bother, but
-#   if no reserve (i.e. "120:0") is desired, it should be something
-#   definitely to take care of!
+#   if no reserve (i.e. "120:0") is desired, definitely it should
+#   be something to take care of!
 #
 # TESTED: OK
 #
 def retrieve_hosts_per_network(user_config_str: str) -> list[int]:
-    import re
     from math import ceil
+    import re
 
     regex_single_configs = re.compile(r'[0-9]+\:[0-9]+')
     regex_multi_configs = re.compile(r'[0-9]+\:[0-9]+\([0-9]+\)')
@@ -665,7 +665,13 @@ def ask_hosts_per_subnets() -> list[int]:
 # your maximum host count per subnet up to 2⁴-2 = 14 hosts.
 #
 # Therefore, we need to calculate whether the provided net config
-# will be possible:
+# will be possible. This has to be tested once per each subnet config
+# of a certain type (i.e., if the user typed "1000:40, 400:20, 2:0(5)",
+# we check if the blocksize fits for 1x subnet of 11 bits host blocksize
+# and 1 subnetting bit, 1x subnet of 9 host bits and 1 subnetting bit
+# and finally 5x subnets of 2 host bits and 3 subnetting bits).
+#
+# For each configuration:
 #
 # 1)    Check the on-demand amount of networks and calculate the
 #       subnetting blocksize in bits.
@@ -685,54 +691,71 @@ def ask_hosts_per_subnets() -> list[int]:
 # 4)    Now, we subtract the default prefix from the entire 32-bit word,
 #       giving us the totally available block size for the subnetting.
 # 5)    If the subnetting is sufficient, subnet's blocksize
-#       plus host's blocksize will fit the available total blocksize.           
+#       plus host's blocksize will fit the available total blocksize.
 #
-# TESTED: OK
+# TESTED: not yet
 #
-def validate_user_subnetting(user_net_host_config: list) -> list:
+def validate_user_subnets_blocksize_fit(user_net_host_config: list) -> list:
     orig_net_addr = user_net_host_config[0]
+    orig_addrclass = determine_addrclass(orig_net_addr)[0]
     default_prefix = int(determine_addrclass(orig_net_addr)[2])
 
     hosts_per_subnets = user_net_host_config[1]
     hosts_per_subnets.sort()
     hosts_per_subnets = hosts_per_subnets[::-1]
+    total_subnets_demanded = len(hosts_per_subnets)
 
-    user_hosts_demanded = hosts_per_subnets[0]
-    user_subnets_demanded = len(hosts_per_subnets)
+    are_blocks_fitting = []
+    faulty_subnets = ""
 
-    # When calculating the subnetting blocksize, we have to take
-    # care of the fact that you can create two subnets with
-    # 1 borrow bit, four with 2 borrow bits etc.
-    # => This is due to permutations, because we always start
-    # counting at zero.
-    # I.e., if we need four subnets, 4 = 0b100, including 3 bits.
-    # But we count from 0 to 3 in fact, such that 3 = 0b11
-    # only requires 2 bits actually.
-    # Therefore, we subtract 1 of the subnets which have been demanded.
-    #
-    # Speaking of the hosts, we don't have such a situation, since the
-    # first available host number is always reserved for the network's address.
-    #
-    blocksize_user_hosts = len(bin(user_hosts_demanded)[2:])
-    blocksize_user_subnets = len(bin(user_subnets_demanded - 1)[2:])
+    for user_hosts_demanded in hosts_per_subnets:
+        user_subnets_demanded = hosts_per_subnets.count(user_hosts_demanded)
 
-    total_blocksize_available = 32 - default_prefix
-    total_blocksize_demanded = (
-        blocksize_user_subnets + blocksize_user_hosts)
+        # When calculating the subnetting blocksize, we have to take
+        # care of the fact that you can create two subnets with
+        # 1 borrow bit, four with 2 borrow bits etc.
+        # => This is due to permutations, because we always start
+        # counting at zero.
+        # I.e., if we need four subnets, 4 = 0b100, including 3 bits.
+        # But we count from 0 to 3 in fact, such that 3 = 0b11
+        # only requires 2 bits actually.
+        # Therefore, we subtract 1 of the subnets which have been demanded.
+        #
+        # Speaking of the hosts, we don't have such a situation, since the
+        # first available host number is always reserved for the network's address.
+        #
+        blocksize_user_hosts = len(bin(user_hosts_demanded)[2:])
+        blocksize_user_subnets = len(bin(user_subnets_demanded - 1)[2:])
 
-    if total_blocksize_demanded <= total_blocksize_available:
+        total_blocksize_available = 32 - default_prefix
+        total_blocksize_demanded = (
+            blocksize_user_subnets + blocksize_user_hosts)
+
+        are_blocks_fitting.append(
+            total_blocksize_demanded <= total_blocksize_available)
+
+    # Subnetting is only sufficient iff all subnet blocks fit their available blocksize
+    if are_blocks_fitting.count(True) == total_subnets_demanded:
         return [True, ""]
 
     else:
-        err_msg = (f"Sorry, your config exceeds the available blocksize "
-                   f"of {total_blocksize_available} bits!\n"
-                   f"(i) Current config would require {total_blocksize_demanded} bits.\n"
-                   f" –> You have to do at least one of these tasks:\n"
-                   f"   a) Reduce the amount of hosts in your largest subnet,\n"
-                   f"   b) Reduce the amount of subnets or\n"
-                   f"   c) If possible, use an upper address class "
-                   f"(> {determine_addrclass(orig_net_addr)[0]}) "
-                   f"for your original network.\n")
+        for (i, does_block_fit) in enumerate(are_blocks_fitting):
+            if not does_block_fit:
+                faulty_subnets += f"\t/!\ Subnet {i+1}:\t{hosts_per_subnets[i]} hosts\n"
+
+        err_msg = (f"Sorry, some of your subnets exceed their maximum blocksize!\n"
+                   f" –> Take a look at these subnets:\n"
+                   f"{faulty_subnets}\n"
+                   f" You have to figure out if you:\n"
+                   f"   a) exceeded the maximum subnets for this prefix or\n"
+                   f"   b) exceeded the maximum hosts, causing a collision "
+                   f"with the subnetting block.\n\n"
+                   f" These options might help you:\n"
+                   f"   1) Reduce the amount of hosts in these subnets,\n"
+                   f"   2) Reduce the amount of troublesome subnets themselves or\n"
+                   f"   3) If possible, use an upper address class "
+                   f"(> {orig_addrclass}) for your original network.\n")
+
         return [False, err_msg]
 
 
@@ -799,7 +822,7 @@ def input_config() -> list:
 def main():
     print(f"\n*** SUBito 0.2 – subnetting tool ***\n")
     user_subnet_config = input_config()
-    subnetting_check = validate_user_subnetting(user_subnet_config)
+    subnetting_check = validate_user_subnets_blocksize_fit(user_subnet_config)
 
     if subnetting_check[0]:
         subnet_specs = create_subnetting_list(user_subnet_config)
