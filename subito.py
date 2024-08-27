@@ -693,7 +693,7 @@ def ask_hosts_per_subnets() -> list[int]:
 # 5)    If the subnetting is sufficient, subnet's blocksize
 #       plus host's blocksize will fit the available total blocksize.
 #
-# TESTED: not yet
+# TESTED: OK
 #
 def validate_user_subnets_blocksize_fit(user_net_host_config: list) -> list:
     orig_net_addr = user_net_host_config[0]
@@ -809,6 +809,79 @@ def print_final_subnets(subnetting_list: list[list], user_net_host_config: list)
 
 
 ###
+# CREATING NETWORK SPREADSHEETS
+# Maybe users not only like to get an overview about their new
+# subnetting rather than create an entire network plan.
+# Because this can become a tedious and time-consuming job, this
+# function creates an Excel sheet template in order to make
+# this task much easier.
+#
+# ==> This function checks first if the module "XlsxWriter" is installed.
+# If not, the user is prompted to install it first and then to run this
+# script again.
+#
+# If the module is installed, the function asks for a filename and then
+# writes a valid(!) subnetting configuration into an Excel spreadsheet
+# (which of course is readable by most other spreadsheet calculation apps).
+#
+# TESTED: not yet
+#
+def write_subnetting_conf_to_excelfile(
+        filename: str, subnetting_list: list[list], user_net_host_config: list) -> None:
+
+    try:
+        import xlsxwriter
+
+        workbook = xlsxwriter.Workbook(filename)
+        worksheet = workbook.add_worksheet(name="SUBito netplan")
+
+        hosts_per_subnets = user_net_host_config[1]
+        hosts_per_subnets.sort()
+        hosts_per_subnets.reverse()
+        total_subnets = len(subnetting_list)
+
+        col_titles = ["Subnet no.", "Max. hosts",
+                      "Network addr.", "Subnet mask",
+                      "First host addr.", "Last host addr.",
+                      "Broadcast addr."]
+
+        # Fill in the titles of the columns, first
+        for (col, title) in enumerate(col_titles):
+            worksheet.write(0, col, title)
+
+        # Now, we can write down all the networks' data
+        for (i, subnet) in enumerate(subnetting_list):
+            max_hosts = 2 ** len(bin(hosts_per_subnets[i])[2:]) - 2
+
+            # The subnet's number
+            worksheet.write(i + 1, 0, i + 1)
+
+            # Maximum host amount for this subnet
+            worksheet.write(i + 1, 1, max_hosts)
+
+            # The subnet's own address
+            worksheet.write(
+                i + 1, 2, f"{subnet[0]}/{convert_subnetmask_to_prefix(subnet[1])}")
+
+            # All other data: subnet mask, first host, last host and broadcast addresses
+            for j in range(1, 5):
+                worksheet.write(i + 1, j + 2, subnet[j])
+
+        # Important: Finally close the file!
+        workbook.close()
+
+    except ImportError as err:
+        print(f"Creating spreadsheets requires Python module 'XlsxWriter'!\n"
+              f"(i) Python error code: {err}\n"
+              f" Please, install the missing module first.\n"
+              f" –> It's recommended to use Python's package manager, pip:\n"
+              f"  System-wide:\t\tpip install XlsxWriter\n"
+              f"  Per user only:\tpip install --user XlsxWriter\n\n"
+              f" After that, run 'SUBito' again and you are ready ;)\n")
+
+
+###
+# CONFIGURATOR
 # Asking all configuration options from the user.
 #
 # TESTED: OK
@@ -828,6 +901,8 @@ def main():
         subnet_specs = create_subnetting_list(user_subnet_config)
         # print_summary(subnet_specs, user_subnet_config)
         print_final_subnets(subnet_specs, user_subnet_config)
+        write_subnetting_conf_to_excelfile(
+            "subnetting.xlsx", subnet_specs, user_subnet_config)
 
     else:
         print(subnetting_check[1])
