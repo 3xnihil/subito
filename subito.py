@@ -614,6 +614,36 @@ def retrieve_hosts_per_network(user_config_str: str) -> list[int]:
 
 
 ###
+# ASKING DIALOG "YES/NO"
+# Just a simple check-in if an option is desired or not.
+#
+def got_checked(prompt: str, is_yes_default: bool = False) -> bool:
+    if is_yes_default:
+        default_indicator = "[Y/n]"
+    else:
+        default_indicator = "[y/N]"
+
+    choice = str(input(f"{prompt} {default_indicator}: "))
+
+    # In case the user doesn't type and simply presses Enter (or any key)
+    if not choice.isalpha() and is_yes_default:
+        return True
+
+    elif not choice.isalpha() and not is_yes_default:
+        return False
+
+    elif choice.isalpha() and choice[0].upper() == "Y":
+        return True
+
+    elif choice.isalpha() and choice[0].upper() == "N":
+        return False
+
+    # Invalid input should always deny the action in question
+    else:
+        return False
+
+
+###
 # Ask for subnet configuration contained in a string.
 #
 # TESTED: OK
@@ -634,14 +664,14 @@ def ask_hosts_per_subnets() -> list[int]:
                 f"Each config block may\n"
                 f"  be separated by colon from another.\n")
 
-    example_choice = str(input(f"\nConfiguration:\n"
-                               f"Enter desired "
-                               f"host count AND "
-                               f"reserve percentage PER EACH "
-                               f"'on-demand' subnet.\n"
-                               f"Give example? [y/N]: "))
+    example_question = (f"\nConfiguration:\n"
+                        f"Enter desired "
+                        f"host count AND "
+                        f"reserve percentage PER EACH "
+                        f"'on-demand' subnet.\n"
+                        f"Give example?")
 
-    if example_choice.isalpha() and example_choice[0].upper() == "Y":
+    if got_checked(example_question):
         print(hint_msg)
 
     hosts_per_subnets = str(input(f"Enter config string [#:#(#)]: "))
@@ -760,27 +790,6 @@ def validate_user_subnets_blocksize_fit(user_net_host_config: list) -> list:
 
 
 ###
-# Show a short comprehension (summary) of the demanded subnetting.
-#
-# FIXME: under construction
-#
-def print_summary(subnetting_list: list[list], user_net_host_config: list) -> None:
-    hosts_per_subnets = user_net_host_config[1]
-    total_subnets = len(hosts_per_subnet)
-    hosts_per_subnets.sort()
-    hosts_per_subnets = hosts_per_subnets[::-1]
-
-    print(f"Summary: Original network: "
-          f"{subnetting_list[0][0]}"
-          f"/{convert_subnetmask_to_prefix(subnetting_list[0][1])}\n"
-          f" {len(subnetting_list)} total subnets:")
-
-    for (i, n_hosts) in enumerate(hosts_per_subnets):
-        print(f" {f'({i+1})'.ljust(len(f'{total_subnets}')+2)} "   # Network's number
-              f"foo")
-
-
-###
 # Show the resulting subnets, ordered from the
 # largest to the smallest networks:
 #
@@ -824,7 +833,7 @@ def print_final_subnets(subnetting_list: list[list], user_net_host_config: list)
 # writes a valid(!) subnetting configuration into an Excel spreadsheet
 # (which of course is readable by most other spreadsheet calculation apps).
 #
-# TESTED: not yet
+# TESTED: OK
 #
 def write_subnetting_conf_to_excelfile(
         filename: str, subnetting_list: list[list], user_net_host_config: list) -> None:
@@ -899,10 +908,16 @@ def main():
 
     if subnetting_check[0]:
         subnet_specs = create_subnetting_list(user_subnet_config)
-        # print_summary(subnet_specs, user_subnet_config)
         print_final_subnets(subnet_specs, user_subnet_config)
-        write_subnetting_conf_to_excelfile(
-            "subnetting.xlsx", subnet_specs, user_subnet_config)
+
+        if got_checked("Save this config?", True):
+            write_subnetting_conf_to_excelfile(
+                "subito_subnetting.xlsx", subnet_specs, user_subnet_config)
+            print(f" –> Stored an Excel spreadsheet into your working dir.\n"
+                  f" Have a nice day :)\n")
+
+        else:
+            print(f" –> Nothing saved. See you :)\n")
 
     else:
         print(subnetting_check[1])
