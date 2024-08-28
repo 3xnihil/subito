@@ -818,6 +818,60 @@ def print_final_subnets(subnetting_list: list[list], user_net_host_config: list)
 
 
 ###
+# WRITE SUBNETTING CONFIG TO A SPREADSHEET
+# This function only performs the actual writing of the final
+# subnet configs to an Excel file.
+#
+# TESTED: OK
+#
+def write_subnetting_conf_to_excelfile(
+        filename: str, subnetting_list: list[list],
+        user_net_host_config: list) -> None:
+
+    import xlsxwriter
+
+    workbook = xlsxwriter.Workbook(filename)
+    worksheet = workbook.add_worksheet(name="SUBito netplan")
+
+    hosts_per_subnets = user_net_host_config[1]
+    hosts_per_subnets.sort()
+    hosts_per_subnets.reverse()
+    total_subnets = len(subnetting_list)
+
+    col_titles = ["Subnet no.", "Max. hosts",
+                  "Network addr.", "Subnet mask",
+                  "First host addr.", "Last host addr.",
+                  "Broadcast addr."]
+
+    # Fill in the titles of the columns, first
+    for (col, title) in enumerate(col_titles):
+        worksheet.write(0, col, title)
+
+    # Now, we can write down all the networks' data
+    for (i, subnet) in enumerate(subnetting_list):
+        max_hosts = 2 ** len(bin(hosts_per_subnets[i])[2:]) - 2
+
+        # The subnet's number
+        worksheet.write(i + 1, 0, i + 1)
+
+        # Maximum host amount for this subnet
+        worksheet.write(i + 1, 1, max_hosts)
+
+        # The subnet's own address
+        worksheet.write(
+            i + 1, 2, f"{subnet[0]}/{convert_subnetmask_to_prefix(subnet[1])}")
+
+        # All other data: subnet mask, first host, last host and broadcast addresses
+        for j in range(1, 5):
+            worksheet.write(i + 1, j + 2, subnet[j])
+
+    # Important: Finally close the file!
+    workbook.close()
+    print(f" –> Stored spreadsheet into your working dir.\n"
+          f" Have a nice day :)\n")
+
+
+###
 # CREATING NETWORK SPREADSHEETS
 # Maybe users not only like to get an overview about their new
 # subnetting rather than create an entire network plan.
@@ -835,58 +889,39 @@ def print_final_subnets(subnetting_list: list[list], user_net_host_config: list)
 #
 # TESTED: OK
 #
-def write_subnetting_conf_to_excelfile(
-        filename: str, subnetting_list: list[list], user_net_host_config: list) -> None:
+def save_subnetting_conf(
+        filename: str, subnetting_list: list[list],
+        user_net_host_config: list) -> None:
 
     try:
-        import xlsxwriter
+        write_subnetting_conf_to_excelfile(
+            filename, subnetting_list, user_net_host_config)
 
-        workbook = xlsxwriter.Workbook(filename)
-        worksheet = workbook.add_worksheet(name="SUBito netplan")
-
-        hosts_per_subnets = user_net_host_config[1]
-        hosts_per_subnets.sort()
-        hosts_per_subnets.reverse()
-        total_subnets = len(subnetting_list)
-
-        col_titles = ["Subnet no.", "Max. hosts",
-                      "Network addr.", "Subnet mask",
-                      "First host addr.", "Last host addr.",
-                      "Broadcast addr."]
-
-        # Fill in the titles of the columns, first
-        for (col, title) in enumerate(col_titles):
-            worksheet.write(0, col, title)
-
-        # Now, we can write down all the networks' data
-        for (i, subnet) in enumerate(subnetting_list):
-            max_hosts = 2 ** len(bin(hosts_per_subnets[i])[2:]) - 2
-
-            # The subnet's number
-            worksheet.write(i + 1, 0, i + 1)
-
-            # Maximum host amount for this subnet
-            worksheet.write(i + 1, 1, max_hosts)
-
-            # The subnet's own address
-            worksheet.write(
-                i + 1, 2, f"{subnet[0]}/{convert_subnetmask_to_prefix(subnet[1])}")
-
-            # All other data: subnet mask, first host, last host and broadcast addresses
-            for j in range(1, 5):
-                worksheet.write(i + 1, j + 2, subnet[j])
-
-        # Important: Finally close the file!
-        workbook.close()
-
-    except ImportError as err:
+    except ImportError:
         print(f"Creating spreadsheets requires Python module 'XlsxWriter'!\n"
-              f"(i) Python error code: {err}\n"
               f" Please, install the missing module first.\n"
               f" –> It's recommended to use Python's package manager, pip:\n"
-              f"  System-wide:\t\tpip install XlsxWriter\n"
-              f"  Per user only:\tpip install --user XlsxWriter\n\n"
-              f" After that, run 'SUBito' again and you are ready ;)\n")
+              f"  System-wide:\t\tpython -m pip install xlsxwriter\n"
+              f"  Per user only:\tpython -m pip install --user xlsxwriter\n\n"
+              f" After that, run SUBito again and you are ready ;)\n")
+
+        if got_checked("If lazy, try unorthodox pip auto-install?"):
+            from subprocess import run
+            run(["python", "-m", "pip", "install", "--user", "xlsxwriter"])
+            print(f"\nNegligently not knowing the exit status of the install,\n"
+                  f"trying to create your Excel spreadsheet again ...\n")
+
+            try:
+                write_subnetting_conf_to_excelfile(
+                    filename, subnetting_list, user_net_host_config)
+
+            except ImportError:
+                print(f"Well, did my best 0~0\n"
+                      f" –> Seems like you have to install xlsxwriter module manually.\n")
+
+        else:
+            print(f"Wise decision ;)\n"
+                  f"–> It's best to install Python modules by yourself.\n")
 
 
 ###
@@ -911,10 +946,8 @@ def main():
         print_final_subnets(subnet_specs, user_subnet_config)
 
         if got_checked("Save this config?", True):
-            write_subnetting_conf_to_excelfile(
+            save_subnetting_conf(
                 "subito_subnetting.xlsx", subnet_specs, user_subnet_config)
-            print(f" –> Stored an Excel spreadsheet into your working dir.\n"
-                  f" Have a nice day :)\n")
 
         else:
             print(f" –> Nothing saved. See you :)\n")
