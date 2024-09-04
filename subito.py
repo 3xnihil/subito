@@ -838,32 +838,55 @@ def write_subnetting_conf_to_excelfile(
     hosts_per_subnets.reverse()
     total_subnets = len(subnetting_list)
 
-    col_titles = ["Subnet no.", "Max. hosts",
-                  "Network addr.", "Subnet mask",
-                  "First host addr.", "Last host addr.",
-                  "Broadcast addr."]
+    col_titles = ["Subnet no.", "Network addr.",
+                  "Max. hosts", "Subnet mask",
+                  "Prefix", "Hostname",
+                  "Interface", "IP addr."]
+
+    row_titles = ["First host", "Last host", "Broadcast"]
 
     # Fill in the titles of the columns, first
     for (col, title) in enumerate(col_titles):
         worksheet.write(0, col, title)
 
-    # Now, we can write down all the networks' data
+    # We can write down all the networks' data.
+    # The dedicated iteration counter vars are really
+    # not that elegant, but this may be fixed in future
+    # and serves its purpose for now ^^
+    k = 0
     for (i, subnet) in enumerate(subnetting_list):
         max_hosts = 2 ** len(bin(hosts_per_subnets[i])[2:]) - 2
+        prefix = convert_subnetmask_to_prefix(subnet[1])
 
         # The subnet's number
-        worksheet.write(i + 1, 0, i + 1)
-
-        # Maximum host amount for this subnet
-        worksheet.write(i + 1, 1, max_hosts)
+        worksheet.write(k + 1, 0, i + 1)
 
         # The subnet's own address
-        worksheet.write(
-            i + 1, 2, f"{subnet[0]}/{convert_subnetmask_to_prefix(subnet[1])}")
+        worksheet.write(k + 1, 1, subnet[0])
 
-        # All other data: subnet mask, first host, last host and broadcast addresses
-        for j in range(1, 5):
-            worksheet.write(i + 1, j + 2, subnet[j])
+        # Maximum host amount for this subnet
+        worksheet.write(k + 1, 2, max_hosts)
+
+        # Subnet mask
+        worksheet.write(k + 1, 3, subnet[1])
+
+        # Prefix
+        worksheet.write(k + 1, 4, prefix)
+
+        # Write the already known "host names"
+        for (row, entry) in enumerate(row_titles):
+            worksheet.write(k + row + 1, 5, entry)
+
+        # Finally, put in first host, last host and broadcast addresses
+        j = 2
+        for row in range(k + 1, k + 4):
+            worksheet.write(row, 7, subnet[j])
+            j += 1
+
+        # We have to step over at least three lines in next iteration.
+        # Otherwise, two lines of the previous subnet config would
+        # become overwritten
+        k += 4
 
     # Important: Finally close the file!
     workbook.close()
