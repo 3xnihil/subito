@@ -6,18 +6,24 @@ You only have to provide a network address, and *SUBito* will calculate all the 
 At the end, you may even decide whether to save the config to an Excel file, making a great starting point for further
 improvements.
 ### Requirements
-* Python, of course (version 3)
-* Python module *xlsxwriter* [1]
+* **Python**, of course (version 3)
+* Python module **xlsxwriter** [1]
 * *Optional but useful*: Knowing how to set up a Python virtual environment
 ---
 [1] At time of writing I added this in a hurry. Future versions might come aptly packaged with all the dependencies
 as one could expect ;)
+---
 ### Setup (any *nix-based OS)
 1. It's recommended to create a venv first:
 `python3 -m venv subito`
 2. Switch to the venv: `source subito/bin/activate`
 3. Install *xlsxwriter* via pip: `pip install xlsxwriter`
 4. Leave the venv: `deactivate`
+### Features
+* **Active guidance**
+* **Robust**: Detect errors in your network plan easily
+* **Receive hints** if errors are found
+* **Easy export**: Save your final subnetting to an **Excel spreadsheet**
 ### Usage
 * On startup, you'll be asked for a network address
 * You will be asked for a network *config string*
