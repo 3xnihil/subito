@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SUBITO Subnetting utility - subito/subito.py
+# SUBito IPv4 subnetting utility
 #
 # Author: Johannes Hüffer
 # Date: 08.08.2024 (beginning)
@@ -54,7 +54,7 @@
 # subnets vs. hosts and desired quantities) and, if it is, shows a
 # network plan with all subnets and their address spaces.
 #
-# Put into a user-friedly CLI, this would be like:
+# Put into a user-friendly CLI, this would be like:
 #
 #           *** SUBITO – subnetting tool ***
 #

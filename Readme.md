@@ -19,6 +19,7 @@ as one could expect ;)
 2. Switch to the venv: `source subito/bin/activate`
 3. Install *xlsxwriter* via pip: `pip install xlsxwriter`
 4. Leave the venv: `deactivate`
+5. Make *subito* executable: `chmod +x subito`
 ### Features
 * **Active guidance**
 * **Robust**: Detect errors in your network plan easily
