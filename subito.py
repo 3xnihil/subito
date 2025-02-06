@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 #
 # SUBITO Subnetting utility - subito/subito.py
 #
@@ -771,7 +771,7 @@ def validate_user_subnets_blocksize_fit(user_net_host_config: list) -> list:
     else:
         for (i, does_block_fit) in enumerate(are_blocks_fitting):
             if not does_block_fit:
-                faulty_subnets += f"\t/!\ Subnet {i+1}:\t{hosts_per_subnets[i]} hosts\n"
+                faulty_subnets += f"\t/!\\ Subnet {i+1}:\t{hosts_per_subnets[i]} hosts\n"
 
         err_msg = (f"Sorry, some of your subnets exceed their maximum blocksize!\n"
                    f" –> Take a look at these subnets:\n"
