@@ -9,10 +9,8 @@ improvements.
 * **Python**, of course (version 3)
 * Python module **xlsxwriter** [1]
 * *Optional but useful*: Knowing how to set up a Python virtual environment
----
-[1] At time of writing I added this in a hurry. Future versions might come aptly packaged with all the dependencies
+> [1] At time of writing I added this in a hurry. Future versions might come aptly packaged with all dependencies
 as one could expect ;)
----
 ### Setup (any *nix-based OS)
 1. It's recommended to create a venv first:
 `python3 -m venv subito`
